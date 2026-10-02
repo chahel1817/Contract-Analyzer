@@ -14,16 +14,22 @@ import {
   Search,
 } from 'lucide-react';
 
+import { CitationItem } from '@/lib/api';
+
 export interface MessageProps {
   message: ChatMessage;
   onJumpToPage?: (pageNumber: number) => void;
   documentId?: string;
+  onSelectCitation?: (citation: CitationItem) => void;
+  selectedCitationId?: string;
 }
 
 export default function Message({
   message,
   onJumpToPage,
   documentId,
+  onSelectCitation,
+  selectedCitationId,
 }: MessageProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
@@ -162,6 +168,8 @@ export default function Message({
                     citation={citation}
                     onJumpToPage={onJumpToPage}
                     documentId={documentId}
+                    onSelectCitation={onSelectCitation}
+                    isSelected={selectedCitationId === citation.id}
                   />
                 ))}
               </div>

@@ -1,22 +1,22 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import React, { useEffect, useState, Suspense } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { fetchDocumentById } from '@/lib/api';
+import { HighlightTarget } from '@/lib/citation-highlight';
 import {
   ChevronLeft,
   MessageSquare,
   FileText,
   Layers,
-  Calendar,
   CheckCircle2,
-  Clock,
   AlertTriangle,
   Loader2,
-  ExternalLink,
   BookOpen,
+  Highlighter,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -31,14 +31,33 @@ const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
   ),
 });
 
-export default function DocumentViewerPage() {
+function DocumentViewerContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const id = params?.id as string;
 
   const [document, setDocument] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [highlightTarget, setHighlightTarget] = useState<HighlightTarget | null>(null);
+
+  // Read URL search params for citation highlighting (Requirement 17 & 18)
+  useEffect(() => {
+    const quote = searchParams.get('quote');
+    const startOffset = searchParams.get('startOffset');
+    const endOffset = searchParams.get('endOffset');
+    const page = searchParams.get('page');
+
+    if (quote) {
+      setHighlightTarget({
+        quote,
+        startOffset: startOffset ? parseInt(startOffset, 10) : undefined,
+        endOffset: endOffset ? parseInt(endOffset, 10) : undefined,
+        pageStart: page ? parseInt(page, 10) : 1,
+      });
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!id) return;
@@ -72,6 +91,27 @@ export default function DocumentViewerPage() {
 
   const isPdf = document?.fileName?.toLowerCase().endsWith('.pdf');
   const fileUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/documents/${id}/file`;
+
+  // Helper for highlighting quotes in DOCX view
+  const renderDocxWithHighlight = (text: string, quote?: string) => {
+    if (!quote || !text) return text;
+    const lowerText = text.toLowerCase();
+    const lowerQuote = quote.toLowerCase().trim();
+    const idx = lowerText.indexOf(lowerQuote);
+    if (idx === -1) return text;
+
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + quote.length);
+    const after = text.slice(idx + quote.length);
+
+    return (
+      <>
+        {before}
+        <mark className="contract-citation-highlight rounded px-1 font-semibold">{match}</mark>
+        {after}
+      </>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500/30 selection:text-indigo-200">
@@ -145,8 +185,10 @@ export default function DocumentViewerPage() {
               {isPdf ? (
                 <PdfViewer
                   url={fileUrl}
-                  initialPage={1}
+                  initialPage={highlightTarget?.pageStart || 1}
                   fileName={document.fileName}
+                  highlightTarget={highlightTarget}
+                  onClearHighlight={() => setHighlightTarget(null)}
                 />
               ) : (
                 /* DOCX / Plaintext Viewer */
@@ -161,8 +203,26 @@ export default function DocumentViewerPage() {
                     </span>
                   </div>
 
+                  {highlightTarget?.quote && (
+                    <div className="mb-4 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Highlighter className="w-3.5 h-3.5 text-amber-400" />
+                        Highlighted quote: &ldquo;{highlightTarget.quote}&rdquo;
+                      </span>
+                      <button
+                        onClick={() => setHighlightTarget(null)}
+                        className="p-1 rounded hover:bg-amber-500/20 text-amber-300"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="prose prose-invert max-w-none text-slate-300 text-sm whitespace-pre-wrap leading-relaxed max-h-[700px] overflow-y-auto pr-2">
-                    {document.extractedText || 'No text extracted from this document.'}
+                    {renderDocxWithHighlight(
+                      document.extractedText || 'No text extracted from this document.',
+                      highlightTarget?.quote
+                    )}
                   </div>
                 </div>
               )}
@@ -258,5 +318,20 @@ export default function DocumentViewerPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function DocumentViewerPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mr-2" />
+          Loading document viewer...
+        </div>
+      }
+    >
+      <DocumentViewerContent />
+    </Suspense>
   );
 }

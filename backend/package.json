@@ -17,6 +17,7 @@
     "test:citation": "ts-node-dev --transpile-only src/test-citation.ts",
     "test:chat": "ts-node-dev --transpile-only src/test-chat-e2e.ts",
     "test:persistence": "ts-node-dev --transpile-only src/test-chat-persistence-streaming.ts",
+    "test:highlight": "ts-node-dev --transpile-only src/test-highlighting.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

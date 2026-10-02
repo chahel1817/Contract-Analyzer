@@ -128,3 +128,29 @@
     @apply font-sans;
   }
 }
+
+/* ============================================================
+   Contract Citation Highlighting in PDF Text Layer
+   ============================================================ */
+mark.contract-citation-highlight {
+  background-color: rgba(251, 191, 36, 0.45) !important;
+  color: #1e293b !important;
+  border-radius: 3px !important;
+  padding: 1px 3px !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.7) !important;
+  animation: citationPulse 2.4s ease-in-out infinite alternate !important;
+  display: inline !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+@keyframes citationPulse {
+  0% {
+    background-color: rgba(251, 191, 36, 0.4);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.5);
+  }
+  100% {
+    background-color: rgba(251, 191, 36, 0.75);
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.9), 0 0 16px rgba(245, 158, 11, 0.5);
+  }
+}
