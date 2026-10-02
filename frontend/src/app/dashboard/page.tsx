@@ -16,6 +16,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Scale,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -91,6 +92,13 @@ export default function DashboardPage() {
 
           <nav className="flex items-center space-x-1 sm:space-x-2">
             <Link
+              href="/assistant"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20 hover:brightness-110 transition flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 fill-current" />
+              Anna AI
+            </Link>
+            <Link
               href="/dashboard"
               className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/80 text-indigo-300 border border-slate-700/60 transition-colors"
             >
@@ -116,6 +124,38 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Anna AI Feature Banner */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-transparent border border-amber-500/20 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+          <div className="flex items-center gap-5">
+            <div className="relative w-16 h-16 shrink-0 rounded-full animate-orb-breathe">
+              <img
+                src="/anna-orb-clean.png"
+                alt="Anna AI Assistant Orb"
+                className="w-full h-full object-contain filter drop-shadow-[0_8px_20px_rgba(245,158,11,0.5)]"
+              />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full mb-1">
+                <Sparkles className="w-3 h-3" />
+                <span>Next-Gen Interaction Model</span>
+              </div>
+              <h2 className="text-xl font-bold text-white tracking-tight">
+                Meet Anna — Your AI Contract Assistant
+              </h2>
+              <p className="text-xs text-slate-300 mt-1 max-w-xl">
+                Experience the new minimalist LLM model interaction with voice dictation, radiant orb visuals, and 100% verified citations.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/assistant"
+            className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-bold text-xs tracking-wide shadow-lg shadow-amber-500/25 flex items-center gap-2 transition active:scale-95 shrink-0"
+          >
+            <span>Launch Anna Assistant</span>
+            <Sparkles className="w-3.5 h-3.5 fill-current" />
+          </Link>
+        </div>
+
         {/* Welcome & Stats Row */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>

@@ -269,26 +269,35 @@ function MultiDocumentChatContent() {
               </div>
             </div>
 
-            {documents.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={selectAll}
-                  className="text-xs h-8 border-slate-800 bg-slate-900 text-slate-300"
-                >
-                  Select All
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={deselectAll}
-                  className="text-xs h-8 text-slate-400 hover:text-slate-200"
-                >
-                  Clear
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <Link
+                href="/assistant"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 text-xs font-semibold shadow-sm transition"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Anna Assistant</span>
+              </Link>
+              {documents.length > 0 && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={selectAll}
+                    className="text-xs h-8 border-slate-800 bg-slate-900 text-slate-300"
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={deselectAll}
+                    className="text-xs h-8 text-slate-400 hover:text-slate-200"
+                  >
+                    Clear
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Document Checklist (Requirement 19) */}
@@ -441,6 +450,14 @@ function MultiDocumentChatContent() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <Link
+            href="/assistant"
+            className="text-xs h-8 px-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 flex items-center gap-1.5 font-medium transition"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Anna Assistant</span>
+          </Link>
+
           <Button
             size="sm"
             variant="outline"

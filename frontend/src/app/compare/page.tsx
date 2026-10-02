@@ -4,7 +4,7 @@ import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import Comparison from '@/components/Comparison';
-import { Scale, MessageSquare, GitCompare, LayoutDashboard } from 'lucide-react';
+import { Scale, MessageSquare, GitCompare, LayoutDashboard, Sparkles } from 'lucide-react';
 
 function CompareContent() {
   const searchParams = useSearchParams();
@@ -41,6 +41,13 @@ export default function ComparePage() {
           </Link>
 
           <nav className="flex items-center space-x-1 sm:space-x-2">
+            <Link
+              href="/assistant"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20 hover:brightness-110 transition flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 fill-current" />
+              Anna AI
+            </Link>
             <Link
               href="/dashboard"
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors flex items-center gap-1.5"
