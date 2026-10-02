@@ -2,72 +2,96 @@ import { Request, Response, NextFunction } from 'express';
 import { documentService } from '../services/document.service';
 import { extractionService } from '../services/extraction.service';
 import { retrievalService } from '../services/retrieval.service';
-import fs from 'fs/promises';
 
 export const uploadDocument = async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        error: 'No file uploaded. Please provide a PDF or DOCX contract file.',
+        error: 'No file uploaded. Please upload a PDF or DOCX file.',
       });
     }
 
     const { originalname, size, mimetype, path: filePath } = req.file;
-
-    // 1. Extract text and detect scanned/empty document
-    let extractionResult;
-    try {
-      extractionResult = await extractionService.extractText(filePath, originalname);
-    } catch (extractErr: any) {
-      // Clean up file if extraction fails
-      await fs.unlink(filePath).catch(() => {});
-      return res.status(400).json({
-        success: false,
-        error: extractErr.message || 'Failed to extract text from document.',
-      });
-    }
-
-    // Handle scanned PDF / empty text (Requirement: Part A #1)
-    if (extractionResult.isScanned || !extractionResult.text || extractionResult.text.trim().length === 0) {
-      await fs.unlink(filePath).catch(() => {});
-      return res.status(422).json({
-        success: false,
-        error: 'The uploaded document appears to be a scanned image or contains no readable text. Please upload a searchable PDF or DOCX file.',
-      });
-    }
-
-    // 2. Derive a clean title from file name
     const defaultTitle = originalname.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
 
-    // 3. Save Document in database
+    // 1. Initial Document Record created with status: PROCESSING
     const document = await documentService.createDocument({
       title: defaultTitle,
       fileName: originalname,
       fileType: mimetype || 'application/octet-stream',
       fileSize: size,
       filePath: filePath,
-      extractedText: extractionResult.text,
-      pageCount: extractionResult.pageCount,
-      status: 'processed',
+      status: 'PROCESSING',
     });
 
-    // 4. Chunk and index document for fast retrieval
+    // 2. Extract text (PDF or DOCX)
+    let extractionResult;
+    try {
+      extractionResult = await extractionService.extractText(filePath, originalname);
+    } catch (extractErr: any) {
+      await documentService.updateDocument(document.id, {
+        status: 'FAILED',
+        errorMessage: extractErr.message || 'Text extraction failed',
+      });
+
+      return res.status(422).json({
+        success: false,
+        error: extractErr.message || 'Text extraction failed.',
+        data: {
+          id: document.id,
+          fileName: document.fileName,
+          status: 'FAILED',
+          errorMessage: extractErr.message || 'Text extraction failed',
+        },
+      });
+    }
+
+    // 3. Handle Scanned PDFs (no readable text -> FAILED)
+    if (extractionResult.isScanned || !extractionResult.text || extractionResult.text.trim().length === 0) {
+      const scannedMsg = 'The document appears to be a scanned image or contains no readable text. OCR is required.';
+      await documentService.updateDocument(document.id, {
+        status: 'FAILED',
+        errorMessage: scannedMsg,
+        pageCount: extractionResult.pageCount || 1,
+      });
+
+      return res.status(422).json({
+        success: false,
+        error: scannedMsg,
+        data: {
+          id: document.id,
+          fileName: document.fileName,
+          status: 'FAILED',
+          errorMessage: scannedMsg,
+        },
+      });
+    }
+
+    // 4. Chunk & Index for Retrieval
     const chunkCount = await retrievalService.indexDocument(document.id, extractionResult.text);
+
+    // 5. Update Document status to READY
+    const updatedDoc = await documentService.updateDocument(document.id, {
+      status: 'READY',
+      extractedText: extractionResult.text,
+      pageCount: extractionResult.pageCount,
+      errorMessage: undefined,
+    });
 
     return res.status(201).json({
       success: true,
-      message: 'Document uploaded, extracted, and indexed successfully.',
+      message: 'Document uploaded and processed successfully.',
       data: {
-        id: document.id,
-        title: document.title,
-        fileName: document.fileName,
-        fileType: document.fileType,
-        fileSize: document.fileSize,
-        pageCount: document.pageCount,
-        status: document.status,
+        id: updatedDoc.id,
+        title: updatedDoc.title,
+        fileName: updatedDoc.fileName,
+        fileType: updatedDoc.fileType,
+        fileSize: updatedDoc.fileSize,
+        pageCount: updatedDoc.pageCount,
+        status: updatedDoc.status,
         chunkCount,
-        createdAt: document.createdAt,
+        createdAt: updatedDoc.createdAt,
       },
     });
   } catch (error) {

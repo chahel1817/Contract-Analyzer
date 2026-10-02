@@ -16,7 +16,7 @@ model Document {
   filePath      String
   extractedText String?         @db.Text
   pageCount     Int?
-  status        String          @default("uploaded") // uploaded, processing, processed, error
+  status        String          @default("PROCESSING") // PROCESSING, READY, FAILED
   errorMessage  String?         @db.Text
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt

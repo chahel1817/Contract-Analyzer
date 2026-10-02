@@ -2,6 +2,8 @@ import { prisma } from '../utils/prisma';
 import fs from 'fs/promises';
 import path from 'path';
 
+export type DocumentStatus = 'PROCESSING' | 'READY' | 'FAILED';
+
 export interface CreateDocumentInput {
   title: string;
   fileName: string;
@@ -10,7 +12,7 @@ export interface CreateDocumentInput {
   filePath: string;
   extractedText?: string;
   pageCount?: number;
-  status?: string;
+  status?: DocumentStatus | string;
   errorMessage?: string;
 }
 
@@ -25,7 +27,20 @@ export class DocumentService {
         filePath: data.filePath,
         extractedText: data.extractedText,
         pageCount: data.pageCount,
-        status: data.status || 'uploaded',
+        status: data.status || 'PROCESSING',
+        errorMessage: data.errorMessage,
+      },
+    });
+  }
+
+  async updateDocument(id: string, data: Partial<CreateDocumentInput>) {
+    return prisma.document.update({
+      where: { id },
+      data: {
+        title: data.title,
+        status: data.status,
+        extractedText: data.extractedText,
+        pageCount: data.pageCount,
         errorMessage: data.errorMessage,
       },
     });
