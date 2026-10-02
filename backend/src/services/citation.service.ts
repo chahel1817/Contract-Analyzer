@@ -146,6 +146,23 @@ export class CitationService {
       }
     }
 
+    // 4. Section Header Prefix Stripping (e.g. "1. TERMINATION: Either party..." -> "Either party...")
+    if (trimmedQuote.includes(':')) {
+      const colonIdx = trimmedQuote.indexOf(':');
+      if (colonIdx <= 40) {
+        const afterColon = trimmedQuote.slice(colonIdx + 1).trim();
+        if (afterColon.length >= 15) {
+          const subResult = this.findQuote(afterColon, documentText);
+          if (subResult.found) {
+            return {
+              ...subResult,
+              confidence: 0.95,
+            };
+          }
+        }
+      }
+    }
+
     // Quote was not found in the original document text (hallucinated or heavily paraphrased)
     return {
       found: false,

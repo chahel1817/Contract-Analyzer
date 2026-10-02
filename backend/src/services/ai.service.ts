@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 export interface ChunkInput {
   id?: string;
+  documentId?: string;
+  documentTitle?: string;
   text: string;
   pageStart?: number | null;
   chunkIndex?: number;
@@ -80,7 +82,10 @@ export class AiService {
     }
 
     const context = chunks
-      .map((c, i) => `--- Excerpt ${i + 1} (Page ${c.pageStart || 1}) ---\n${c.text}`)
+      .map((c, i) => {
+        const docTag = c.documentTitle ? `[Contract: "${c.documentTitle}"] ` : '';
+        return `--- Excerpt ${i + 1} (${docTag}Page ${c.pageStart || 1}) ---\n${c.text}`;
+      })
       .join('\n\n');
 
     // 1. If AI API key is configured (OpenRouter, OpenAI, etc.)
@@ -102,6 +107,7 @@ CRITICAL RULES:
 3. Every item in the "quotes" array MUST be an EXACT, literal quote copied word-for-word from the excerpts. Do NOT paraphrase, summarize, or alter words inside quotes.
 4. If the answer cannot be found in the provided excerpts, state: "The provided contract sections do not contain information to answer this question." and return an empty quotes array [].
 5. Never invent or hallucinate clauses, numbers, or dates not explicitly written in the excerpts.
+6. When excerpts come from multiple contracts, compare and contrast the terms across the contracts directly rather than listing separate answers, and explicitly identify which contract each finding relates to.
 
 Context Excerpts:
 ${context}
@@ -241,7 +247,10 @@ Remember: quotes must be exact literal excerpts. Output JSON only:`,
     }
 
     const context = chunks
-      .map((c, i) => `--- Excerpt ${i + 1} (Page ${c.pageStart || 1}) ---\n${c.text}`)
+      .map((c, i) => {
+        const docTag = c.documentTitle ? `[Contract: "${c.documentTitle}"] ` : '';
+        return `--- Excerpt ${i + 1} (${docTag}Page ${c.pageStart || 1}) ---\n${c.text}`;
+      })
       .join('\n\n');
 
     let fullAnswer = '';
@@ -260,7 +269,8 @@ CRITICAL RULES:
 1. Base your answer EXCLUSIVELY on the provided excerpts.
 2. When referencing specific contractual clauses, obligations, numbers, or rules, wrap exact verbatim quotes in quotation marks "like this".
 3. Never invent or hallucinate terms not found in the excerpts.
-4. Keep the answer direct, authoritative, and well-structured.`,
+4. Keep the answer direct, authoritative, and well-structured.
+5. When excerpts come from multiple contracts, compare and contrast the terms across the contracts directly rather than listing separate answers, and explicitly identify which contract each finding relates to.`,
           prompt: `Context Excerpts:
 ${context}
 

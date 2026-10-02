@@ -20,6 +20,7 @@ export interface MessageProps {
   message: ChatMessage;
   onJumpToPage?: (pageNumber: number) => void;
   documentId?: string;
+  documentTitles?: Record<string, string>;
   onSelectCitation?: (citation: CitationItem) => void;
   selectedCitationId?: string;
 }
@@ -28,6 +29,7 @@ export default function Message({
   message,
   onJumpToPage,
   documentId,
+  documentTitles,
   onSelectCitation,
   selectedCitationId,
 }: MessageProps) {
@@ -167,7 +169,8 @@ export default function Message({
                     key={citation.id || `quote-${idx}`}
                     citation={citation}
                     onJumpToPage={onJumpToPage}
-                    documentId={documentId}
+                    documentId={citation.documentId || documentId}
+                    documentTitle={documentTitles?.[citation.documentId || '']}
                     onSelectCitation={onSelectCitation}
                     isSelected={selectedCitationId === citation.id}
                   />

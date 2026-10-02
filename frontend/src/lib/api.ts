@@ -133,7 +133,8 @@ export async function fetchConversations(documentId: string): Promise<ApiRespons
 }
 
 export interface StreamChatOptions {
-  documentId: string;
+  documentId?: string;
+  documentIds?: string[];
   question: string;
   conversationId?: string;
   signal?: AbortSignal;
@@ -151,6 +152,7 @@ export interface StreamChatOptions {
 
 export async function streamChatMessage({
   documentId,
+  documentIds,
   question,
   conversationId,
   signal,
@@ -169,6 +171,7 @@ export async function streamChatMessage({
       },
       body: JSON.stringify({
         documentId,
+        documentIds,
         question,
         conversationId,
         stream: true,

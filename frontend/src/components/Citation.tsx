@@ -12,12 +12,14 @@ import {
   Quote,
   FileSearch,
   Highlighter,
+  FileText,
 } from 'lucide-react';
 
 export interface CitationProps {
   citation: CitationItem;
   onJumpToPage?: (pageNumber: number) => void;
   documentId?: string;
+  documentTitle?: string;
   onSelectCitation?: (citation: CitationItem) => void;
   isSelected?: boolean;
 }
@@ -26,6 +28,7 @@ export default function Citation({
   citation,
   onJumpToPage,
   documentId,
+  documentTitle,
   onSelectCitation,
   isSelected = false,
 }: CitationProps) {
@@ -96,10 +99,20 @@ export default function Citation({
       {/* Header with Verification Badge & Coordinates */}
       <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-800/80">
         <div className="flex items-center gap-2">
+          {documentTitle && (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 truncate max-w-[130px]"
+              title={documentTitle}
+            >
+              <FileText className="w-3 h-3 text-indigo-400 shrink-0" />
+              <span className="truncate">{documentTitle}</span>
+            </span>
+          )}
+
           {isVerified ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              Verified Quote
+              Verified
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30">
