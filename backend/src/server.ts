@@ -5,6 +5,7 @@ import path from 'path';
 
 import documentRoutes from './routes/document.routes';
 import chatRoutes from './routes/chat.routes';
+import conversationRoutes from './routes/conversation.routes';
 import comparisonRoutes from './routes/comparison.routes';
 import { errorHandler } from './middleware/error.middleware';
 
@@ -24,6 +25,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Routes
 app.use('/api/documents', documentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/conversations', conversationRoutes);
 app.use('/api/comparison', comparisonRoutes);
 
 // Health checks

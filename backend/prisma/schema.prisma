@@ -69,13 +69,19 @@ model Citation {
   id          String         @id @default(uuid())
   messageId   String
   message     Message        @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  documentId  String?
   chunkId     String?
   chunk       DocumentChunk? @relation(fields: [chunkId], references: [id], onDelete: SetNull)
   quote       String         @db.Text
+  verified    Boolean        @default(false)
   isVerified  Boolean        @default(false)
-  pageNumber  Int?
+  startOffset Int?
+  endOffset   Int?
   startIndex  Int?
   endIndex    Int?
+  pageStart   Int?
+  pageEnd     Int?
+  pageNumber  Int?
   confidence  Float?
   createdAt   DateTime       @default(now())
 }

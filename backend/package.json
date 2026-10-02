@@ -14,6 +14,8 @@
     "test:db": "ts-node-dev --transpile-only src/test-db.ts",
     "test:retrieval": "ts-node-dev --transpile-only src/test-retrieval.ts",
     "test:ai": "ts-node-dev --transpile-only src/test-ai.ts",
+    "test:citation": "ts-node-dev --transpile-only src/test-citation.ts",
+    "test:chat": "ts-node-dev --transpile-only src/test-chat-e2e.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

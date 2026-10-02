@@ -1,19 +1,21 @@
 import { Router } from 'express';
 import {
   sendMessage,
-  getChatHistory,
+  getConversationsByDocument,
   searchDocumentChunks,
 } from '../controllers/chat.controller';
 
 const router = Router();
 
-// POST /api/chat/search - Search relevant chunks for a question (without LLM)
-router.post('/search', searchDocumentChunks);
-
-// POST /api/chat/message - Send chat message
+// POST /api/chat - Send message, retrieve chunks, query AI, verify quotes, store citations
+router.post('/', sendMessage);
 router.post('/message', sendMessage);
 
-// GET /api/chat/history/:documentId - Get chat history for document
-router.get('/history/:documentId', getChatHistory);
+// POST /api/chat/search - Search chunks without AI
+router.post('/search', searchDocumentChunks);
+
+// GET /api/chat/history/:documentId - Get conversations and messages
+router.get('/history/:documentId', getConversationsByDocument);
+router.get('/conversations/:documentId', getConversationsByDocument);
 
 export default router;
