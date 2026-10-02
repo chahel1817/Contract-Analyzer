@@ -16,25 +16,19 @@ function CompareContent() {
 
 export default function ComparePage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Background Decorative Gradients */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/10 rounded-full blur-[128px]" />
-        <div className="absolute top-1/3 -right-40 w-96 h-96 bg-purple-600/10 rounded-full blur-[128px]" />
-      </div>
-
+    <div className="min-h-screen bg-[#fafaf9] text-neutral-900 font-sans selection:bg-amber-500/20 selection:text-amber-900">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 w-full border-b border-neutral-200/80 bg-white/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center space-x-3 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-              <Scale className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
+              <Scale className="w-5 h-5 text-neutral-950 font-bold" />
             </div>
             <div>
-              <span className="font-bold text-base tracking-tight bg-gradient-to-r from-slate-100 via-indigo-200 to-indigo-400 bg-clip-text text-transparent">
+              <span className="font-bold text-base tracking-tight text-neutral-900">
                 Contract Analyzer
               </span>
-              <span className="hidden sm:inline-block ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <span className="hidden sm:inline-block ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
                 Comparison Engine
               </span>
             </div>
@@ -43,28 +37,28 @@ export default function ComparePage() {
           <nav className="flex items-center space-x-1 sm:space-x-2">
             <Link
               href="/assistant"
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20 hover:brightness-110 transition flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-neutral-900 text-white hover:bg-black transition flex items-center gap-1.5 shadow-sm"
             >
-              <Sparkles className="w-3.5 h-3.5 fill-current" />
-              Anna AI
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-current" />
+              <span>Talk to Anna</span>
             </Link>
             <Link
               href="/dashboard"
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors flex items-center gap-1.5"
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
               Dashboard
             </Link>
             <Link
               href="/chat"
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors flex items-center gap-1.5"
             >
               <MessageSquare className="w-3.5 h-3.5" />
               Chat
             </Link>
             <Link
               href="/compare"
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/80 text-indigo-300 border border-slate-700/60 transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-neutral-100 text-neutral-900 border border-neutral-200 transition-colors flex items-center gap-1.5"
             >
               <GitCompare className="w-3.5 h-3.5" />
               Compare
@@ -77,7 +71,7 @@ export default function ComparePage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Suspense
           fallback={
-            <div className="p-12 text-center text-slate-400 text-sm">
+            <div className="p-12 text-center text-neutral-400 text-sm">
               Loading contract comparison engine...
             </div>
           }

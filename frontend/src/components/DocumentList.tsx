@@ -13,10 +13,10 @@ import {
   Search,
   Layers,
   Calendar,
-  FileCheck,
   Loader2,
   Eye,
   GitCompare,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -91,31 +91,32 @@ export default function DocumentList({
     switch (status?.toUpperCase()) {
       case 'READY':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <CheckCircle2 className="w-3 h-3" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
             Ready
           </span>
         );
       case 'PROCESSING':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse">
-            <Clock className="w-3 h-3 animate-spin" />
-            Processing...
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Loader2 className="w-3 h-3 animate-spin text-amber-600" />
+            Processing
           </span>
         );
       case 'FAILED':
         return (
           <span
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200"
             title={errorMessage || 'Processing failed'}
-            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 cursor-help"
           >
-            <AlertTriangle className="w-3 h-3" />
+            <AlertTriangle className="w-3 h-3 text-rose-600" />
             Failed
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-600 border border-neutral-200">
+            <Clock className="w-3 h-3 text-neutral-400" />
             {status}
           </span>
         );
@@ -123,50 +124,41 @@ export default function DocumentList({
   };
 
   return (
-    <div className="w-full bg-slate-900/60 border border-slate-800 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
-      {/* Header and Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-            <FileCheck className="w-5 h-5 text-indigo-400" />
-            Contract Library
-            <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-              {documents.length} {documents.length === 1 ? 'file' : 'files'}
-            </span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Manage your uploaded contracts, indexed chunks, and AI analysis status
-          </p>
+    <div className="space-y-4">
+      {/* Search Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="text-xs text-neutral-500 font-medium">
+          Showing <span className="font-bold text-neutral-900">{filteredDocs.length}</span> of {documents.length} contracts
         </div>
 
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <div className="relative w-full sm:w-72">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
           <input
             type="text"
+            placeholder="Search contracts by title, status..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search contracts..."
-            className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-950/60 border border-slate-800 focus:border-indigo-500/60 rounded-xl text-slate-200 placeholder-slate-500 outline-none transition-colors"
+            className="w-full pl-9 pr-4 py-2 bg-white border border-neutral-200/90 rounded-xl text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-amber-400/50 shadow-2xs"
           />
         </div>
       </div>
 
-      {/* Loading Skeleton / Spinner */}
+      {/* Loading Skeleton */}
       {isLoading && documents.length === 0 && (
-        <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center space-y-3">
-          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-          <p className="text-sm">Loading contract library...</p>
+        <div className="py-16 text-center text-neutral-400 flex flex-col items-center justify-center space-y-3 bg-white rounded-2xl border border-neutral-200">
+          <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+          <p className="text-sm font-medium">Loading contract library...</p>
         </div>
       )}
 
       {/* Empty State */}
       {!isLoading && filteredDocs.length === 0 && (
-        <div className="py-16 text-center border-2 border-dashed border-slate-800/80 rounded-xl bg-slate-950/20">
-          <FileText className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-sm font-semibold text-slate-300">
+        <div className="py-16 text-center border-2 border-dashed border-neutral-200 rounded-3xl bg-white p-6">
+          <FileText className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
+          <h3 className="text-sm font-bold text-neutral-800">
             {searchQuery ? 'No matching contracts found' : 'No contracts uploaded yet'}
           </h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+          <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
             {searchQuery
               ? 'Try modifying your search terms.'
               : 'Upload a contract agreement above to start extracting clauses and querying with verified citations.'}
@@ -185,15 +177,15 @@ export default function DocumentList({
             return (
               <div
                 key={doc.id}
-                className="group p-4 bg-slate-950/40 hover:bg-slate-800/40 border border-slate-800/80 hover:border-slate-700 rounded-xl transition-all duration-150 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className="group p-4 bg-white hover:bg-neutral-50/80 border border-neutral-200/90 hover:border-neutral-300 rounded-2xl transition-all shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
                 {/* File info */}
                 <div className="flex items-start space-x-3.5 overflow-hidden">
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
                       isPdf
-                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                        : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                        ? 'bg-rose-50 border-rose-200 text-rose-500'
+                        : 'bg-blue-50 border-blue-200 text-blue-500'
                     }`}
                   >
                     <FileText className="w-5 h-5" />
@@ -201,41 +193,41 @@ export default function DocumentList({
 
                   <div className="overflow-hidden">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="text-sm font-semibold text-slate-100 truncate group-hover:text-indigo-300 transition-colors">
+                      <h4 className="text-sm font-bold text-neutral-900 truncate group-hover:text-amber-600 transition-colors">
                         {doc.title || doc.fileName}
                       </h4>
                       {renderStatusBadge(doc.status, doc.errorMessage)}
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5 flex-wrap">
-                      <span className="text-slate-500">{doc.fileName}</span>
-                      <span>•</span>
+                    <div className="flex items-center gap-3 text-xs text-neutral-500 mt-1 flex-wrap">
+                      <span className="text-neutral-400">{doc.fileName}</span>
+                      <span>&bull;</span>
                       <span>{formatFileSize(doc.fileSize)}</span>
                       {doc.pageCount && (
                         <>
-                          <span>•</span>
+                          <span>&bull;</span>
                           <span>{doc.pageCount} {doc.pageCount === 1 ? 'page' : 'pages'}</span>
                         </>
                       )}
                       {doc._count && doc._count.chunks !== undefined && (
                         <>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Layers className="w-3 h-3 text-indigo-400" />
+                          <span>&bull;</span>
+                          <span className="flex items-center gap-1 font-medium text-neutral-600">
+                            <Layers className="w-3 h-3 text-amber-500" />
                             {doc._count.chunks} chunks
                           </span>
                         </>
                       )}
-                      <span>•</span>
-                      <span className="flex items-center gap-1 text-slate-500">
+                      <span>&bull;</span>
+                      <span className="flex items-center gap-1 text-neutral-400">
                         <Calendar className="w-3 h-3" />
                         {formatDate(doc.createdAt)}
                       </span>
                     </div>
 
-                    {/* Scanned / Error note if FAILED */}
+                    {/* Error note if FAILED */}
                     {doc.status === 'FAILED' && doc.errorMessage && (
-                      <p className="text-xs text-rose-400/90 mt-1.5 flex items-center gap-1">
+                      <p className="text-xs text-rose-600 mt-1.5 flex items-center gap-1">
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                         {doc.errorMessage}
                       </p>
@@ -245,13 +237,26 @@ export default function DocumentList({
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                  {/* Talk to Anna */}
+                  {isReady && (
+                    <Link href={`/assistant?docId=${doc.id}`}>
+                      <Button
+                        size="sm"
+                        className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-xs h-8 px-3 rounded-xl flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 fill-current" />
+                        <span>Talk to Anna</span>
+                      </Button>
+                    </Link>
+                  )}
+
                   <Link href={`/documents/${doc.id}`}>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="border-slate-800 hover:border-slate-700 bg-slate-900/60 text-slate-300 hover:text-white text-xs h-8 px-2.5 rounded-lg flex items-center gap-1.5"
+                      className="border-neutral-200 hover:border-neutral-300 bg-white text-neutral-700 hover:text-neutral-900 text-xs h-8 px-2.5 rounded-xl flex items-center gap-1.5 shadow-2xs cursor-pointer"
                     >
-                      <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                      <Eye className="w-3.5 h-3.5 text-neutral-500" />
                       View
                     </Button>
                   </Link>
@@ -261,7 +266,7 @@ export default function DocumentList({
                       <Link href={`/chat?docId=${doc.id}`}>
                         <Button
                           size="sm"
-                          className="bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs h-8 px-3 rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
+                          className="bg-neutral-900 hover:bg-black text-white text-xs h-8 px-3 rounded-xl flex items-center gap-1.5 shadow-2xs cursor-pointer"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                           Chat
@@ -271,9 +276,9 @@ export default function DocumentList({
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-slate-800 hover:border-slate-700 bg-slate-900/60 text-slate-300 hover:text-white text-xs h-8 px-2.5 rounded-lg flex items-center gap-1.5"
+                          className="border-neutral-200 hover:border-neutral-300 bg-white text-neutral-700 hover:text-neutral-900 text-xs h-8 px-2.5 rounded-xl flex items-center gap-1.5 shadow-2xs cursor-pointer"
                         >
-                          <GitCompare className="w-3.5 h-3.5 text-purple-400" />
+                          <GitCompare className="w-3.5 h-3.5 text-indigo-500" />
                           Compare
                         </Button>
                       </Link>
@@ -285,10 +290,10 @@ export default function DocumentList({
                     variant="ghost"
                     onClick={() => handleDelete(doc.id, doc.title || doc.fileName)}
                     disabled={isDeleting}
-                    className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 h-8 px-2.5 rounded-lg transition-colors"
+                    className="text-neutral-400 hover:text-rose-600 hover:bg-rose-50 h-8 px-2.5 rounded-xl transition-colors cursor-pointer"
                   >
                     {isDeleting ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                      <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
                     ) : (
                       <Trash2 className="w-4 h-4" />
                     )}

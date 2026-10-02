@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
 import { uploadDocument, DocumentItem } from '@/lib/api';
-import { UploadCloud, FileText, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, AlertCircle, Loader2, X, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface DocumentUploadProps {
@@ -79,18 +79,15 @@ export default function DocumentUpload({ onUploadSuccess }: DocumentUploadProps)
     setSuccessMessage(null);
 
     try {
-      const response = await uploadDocument(selectedFile);
+      const result = await uploadDocument(selectedFile);
 
-      if (response.success && response.data) {
-        setSuccessMessage(`"${response.data.title || selectedFile.name}" uploaded and indexed successfully!`);
+      if (result.success && result.data) {
+        setSuccessMessage(`"${result.data.title || result.data.fileName}" uploaded successfully and indexed.`);
         setSelectedFile(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
-        if (onUploadSuccess) onUploadSuccess(response.data);
+        if (onUploadSuccess) onUploadSuccess(result.data);
       } else {
-        setErrorMessage(response.error || 'Failed to process document. Please check the file and try again.');
-        if (onUploadSuccess && response.data) {
-          onUploadSuccess(response.data);
-        }
+        setErrorMessage(result.error || 'Failed to upload document. Please check file format.');
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'An unexpected error occurred during upload.');
@@ -106,15 +103,15 @@ export default function DocumentUpload({ onUploadSuccess }: DocumentUploadProps)
   };
 
   return (
-    <div className="w-full bg-slate-900/60 border border-slate-800 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
+    <div className="p-6 bg-white border border-neutral-200/90 rounded-3xl shadow-xs transition-all">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-            <UploadCloud className="w-5 h-5 text-indigo-400" />
-            Upload Contract
+          <h2 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
+            <UploadCloud className="w-5 h-5 text-amber-500" />
+            Upload Contract Document
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Supported formats: <span className="text-indigo-300 font-medium">PDF, DOCX</span> (up to 50MB)
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Supported formats: <span className="text-amber-700 font-semibold">PDF, DOCX</span> (up to 50MB per contract)
           </p>
         </div>
       </div>
@@ -125,10 +122,10 @@ export default function DocumentUpload({ onUploadSuccess }: DocumentUploadProps)
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => !isUploading && fileInputRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
+        className={`relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-200 ${
           isDragging
-            ? 'border-indigo-500 bg-indigo-950/30 scale-[1.008]'
-            : 'border-slate-700/80 hover:border-slate-500 bg-slate-950/40 hover:bg-slate-900/40'
+            ? 'border-amber-500 bg-amber-50/40 scale-[1.005]'
+            : 'border-neutral-200 hover:border-amber-400 bg-[#fbfbfb] hover:bg-amber-50/20'
         } ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
       >
         <input
@@ -141,28 +138,28 @@ export default function DocumentUpload({ onUploadSuccess }: DocumentUploadProps)
         />
 
         <div className="flex flex-col items-center justify-center space-y-3">
-          <div className="w-12 h-12 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 transition-transform">
             <UploadCloud className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-200">
-              <span className="text-indigo-400 font-semibold underline underline-offset-4">Click to browse</span> or drag and drop your agreement here
+            <p className="text-sm font-semibold text-neutral-800">
+              <span className="text-amber-600 underline underline-offset-4">Click to browse</span> or drag and drop your contract here
             </p>
-            <p className="text-xs text-slate-500 mt-1">Automatic clause chunking, page indexing & quote verification</p>
+            <p className="text-xs text-neutral-400 mt-1">Automatic clause chunking, page indexing & quote verification</p>
           </div>
         </div>
       </div>
 
       {/* Selected File Card */}
       {selectedFile && (
-        <div className="mt-4 p-3.5 bg-slate-800/60 border border-slate-700 rounded-xl flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+        <div className="mt-4 p-3.5 bg-neutral-50 border border-neutral-200 rounded-2xl flex items-center justify-between animate-in fade-in">
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="w-9 h-9 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
-              <FileText className="w-5 h-5 text-indigo-300" />
+            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <FileText className="w-5 h-5 text-amber-600" />
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-medium text-slate-100 truncate">{selectedFile.name}</p>
-              <p className="text-xs text-slate-400">{formatFileSize(selectedFile.size)}</p>
+              <p className="text-sm font-semibold text-neutral-900 truncate">{selectedFile.name}</p>
+              <p className="text-xs text-neutral-400">{formatFileSize(selectedFile.size)}</p>
             </div>
           </div>
 
@@ -175,7 +172,7 @@ export default function DocumentUpload({ onUploadSuccess }: DocumentUploadProps)
                   setSelectedFile(null);
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
-                className="p-1.5 hover:bg-slate-700/60 rounded-lg text-slate-400 hover:text-slate-200 transition-colors"
+                className="p-1.5 hover:bg-neutral-200/60 rounded-lg text-neutral-400 hover:text-neutral-700 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -188,12 +185,12 @@ export default function DocumentUpload({ onUploadSuccess }: DocumentUploadProps)
                 handleUpload();
               }}
               disabled={isUploading}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-4 h-8 rounded-lg shadow-lg shadow-indigo-600/20 flex items-center gap-1.5"
+              className="bg-neutral-900 hover:bg-black text-white font-semibold text-xs px-4 h-9 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
               {isUploading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Processing...
+                  Extracting Clauses...
                 </>
               ) : (
                 'Upload & Extract'
@@ -205,15 +202,15 @@ export default function DocumentUpload({ onUploadSuccess }: DocumentUploadProps)
 
       {/* Error Banner */}
       {errorMessage && (
-        <div className="mt-4 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start gap-2.5 text-rose-300 text-xs animate-in fade-in">
-          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+        <div className="mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2.5 text-rose-700 text-xs animate-in fade-in">
+          <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-semibold block text-rose-200">Upload / Processing Error:</span>
+            <span className="font-bold block text-rose-800">Upload / Processing Error:</span>
             {errorMessage}
           </div>
           <button
             onClick={() => setErrorMessage(null)}
-            className="text-rose-400 hover:text-rose-200 p-0.5"
+            className="text-rose-400 hover:text-rose-700 p-0.5 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -222,12 +219,12 @@ export default function DocumentUpload({ onUploadSuccess }: DocumentUploadProps)
 
       {/* Success Banner */}
       {successMessage && (
-        <div className="mt-4 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-2.5 text-emerald-300 text-xs animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="flex-1 font-medium">{successMessage}</span>
+        <div className="mt-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2.5 text-emerald-800 text-xs animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="flex-1 font-semibold">{successMessage}</span>
           <button
             onClick={() => setSuccessMessage(null)}
-            className="text-emerald-400 hover:text-emerald-200 p-0.5"
+            className="text-emerald-500 hover:text-emerald-800 p-0.5 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>

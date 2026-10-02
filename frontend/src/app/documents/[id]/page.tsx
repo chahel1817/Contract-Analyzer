@@ -24,9 +24,9 @@ import { Button } from '@/components/ui/button';
 const PdfViewer = dynamic(() => import('@/components/PdfViewer'), {
   ssr: false,
   loading: () => (
-    <div className="flex flex-col items-center justify-center min-h-[550px] bg-slate-900/60 border border-slate-800 rounded-2xl">
-      <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
-      <p className="text-xs text-slate-400">Initializing PDF Viewer engine...</p>
+    <div className="flex flex-col items-center justify-center min-h-[550px] bg-white border border-stone-200 rounded-2xl shadow-sm">
+      <Loader2 className="w-8 h-8 text-amber-500 animate-spin mb-3" />
+      <p className="text-xs text-stone-500">Initializing PDF Viewer engine...</p>
     </div>
   ),
 });
@@ -114,35 +114,30 @@ function DocumentViewerContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Decorative Blur */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-[128px]" />
-      </div>
-
+    <div className="min-h-screen bg-[#fafaf9] text-stone-900 selection:bg-amber-100 selection:text-amber-900">
       {/* Top Bar */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 w-full border-b border-stone-200/80 bg-white/90 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Link
               href="/dashboard"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-100 border border-stone-200 transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5" />
             </Link>
 
             <div className="overflow-hidden">
               <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-base font-bold text-slate-100 truncate max-w-xs sm:max-w-md">
+                <h1 className="text-sm sm:text-base font-bold text-stone-900 truncate max-w-xs sm:max-w-md">
                   {document?.title || document?.fileName || 'Contract Viewer'}
                 </h1>
                 {document?.status === 'READY' && (
-                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <CheckCircle2 className="w-3 h-3" /> Ready
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400 truncate">{document?.fileName}</p>
+              <p className="text-[11px] text-stone-500 truncate">{document?.fileName}</p>
             </div>
           </div>
 
@@ -150,7 +145,7 @@ function DocumentViewerContent() {
             <Link href={`/documents/${id}/chat`}>
               <Button
                 size="sm"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8 px-3.5 rounded-lg flex items-center gap-1.5 shadow-lg shadow-indigo-600/20"
+                className="bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs h-8 px-3.5 rounded-xl flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 Ask Contract AI
@@ -164,16 +159,16 @@ function DocumentViewerContent() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {isLoading ? (
           <div className="py-32 text-center flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-            <p className="text-sm text-slate-400">Loading contract and preview...</p>
+            <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+            <p className="text-sm text-stone-500">Loading contract and preview...</p>
           </div>
         ) : error || !document ? (
-          <div className="py-24 text-center max-w-md mx-auto p-8 bg-slate-900/60 border border-slate-800 rounded-2xl">
-            <AlertTriangle className="w-10 h-10 text-rose-400 mx-auto mb-3" />
-            <h3 className="text-sm font-semibold text-slate-200">Document Error</h3>
-            <p className="text-xs text-slate-400 mt-1.5">{error || 'Document not found.'}</p>
+          <div className="py-24 text-center max-w-md mx-auto p-8 bg-white border border-stone-200 rounded-2xl shadow-sm">
+            <AlertTriangle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
+            <h3 className="text-sm font-bold text-stone-900">Document Error</h3>
+            <p className="text-xs text-stone-500 mt-1.5">{error || 'Document not found.'}</p>
             <Link href="/dashboard" className="inline-block mt-4">
-              <Button size="sm" variant="outline" className="text-xs">
+              <Button size="sm" variant="outline" className="text-xs rounded-xl border-stone-200 text-stone-700 cursor-pointer">
                 Back to Dashboard
               </Button>
             </Link>
@@ -192,33 +187,33 @@ function DocumentViewerContent() {
                 />
               ) : (
                 /* DOCX / Plaintext Viewer */
-                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 backdrop-blur-xl">
-                  <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
-                    <div className="flex items-center space-x-2 text-slate-300 text-xs">
-                      <BookOpen className="w-4 h-4 text-indigo-400" />
-                      <span className="font-medium">DOCX Text View</span>
+                <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between pb-4 mb-4 border-b border-stone-100">
+                    <div className="flex items-center space-x-2 text-stone-700 text-xs">
+                      <BookOpen className="w-4 h-4 text-amber-600" />
+                      <span className="font-semibold">DOCX Text View</span>
                     </div>
-                    <span className="text-[11px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
                       Word Document
                     </span>
                   </div>
 
                   {highlightTarget?.quote && (
-                    <div className="mb-4 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
+                    <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between text-xs text-amber-900">
                       <span className="flex items-center gap-1.5 font-medium">
-                        <Highlighter className="w-3.5 h-3.5 text-amber-400" />
+                        <Highlighter className="w-3.5 h-3.5 text-amber-600" />
                         Highlighted quote: &ldquo;{highlightTarget.quote}&rdquo;
                       </span>
                       <button
                         onClick={() => setHighlightTarget(null)}
-                        className="p-1 rounded hover:bg-amber-500/20 text-amber-300"
+                        className="p-1 rounded hover:bg-amber-100 text-amber-700 cursor-pointer"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     </div>
                   )}
 
-                  <div className="prose prose-invert max-w-none text-slate-300 text-sm whitespace-pre-wrap leading-relaxed max-h-[700px] overflow-y-auto pr-2">
+                  <div className="prose max-w-none text-stone-800 text-sm whitespace-pre-wrap leading-relaxed max-h-[700px] overflow-y-auto pr-2">
                     {renderDocxWithHighlight(
                       document.extractedText || 'No text extracted from this document.',
                       highlightTarget?.quote
@@ -231,47 +226,47 @@ function DocumentViewerContent() {
             {/* Sidebar Column (1 col) */}
             <div className="space-y-4">
               {/* Document Overview Card */}
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-xl">
-                <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-indigo-400" />
+              <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
+                <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-amber-600" />
                   Contract Details
                 </h3>
 
                 <dl className="space-y-3 text-xs">
                   <div>
-                    <dt className="text-slate-500">File Type</dt>
-                    <dd className="font-medium text-slate-200 mt-0.5 uppercase">
+                    <dt className="text-stone-500 font-medium">File Type</dt>
+                    <dd className="font-semibold text-stone-900 mt-0.5 uppercase">
                       {isPdf ? 'PDF Document' : 'DOCX Document'}
                     </dd>
                   </div>
 
                   <div>
-                    <dt className="text-slate-500">File Size</dt>
-                    <dd className="font-medium text-slate-200 mt-0.5">{formatFileSize(document.fileSize)}</dd>
+                    <dt className="text-stone-500 font-medium">File Size</dt>
+                    <dd className="font-semibold text-stone-900 mt-0.5">{formatFileSize(document.fileSize)}</dd>
                   </div>
 
                   <div>
-                    <dt className="text-slate-500">Page Count</dt>
-                    <dd className="font-medium text-slate-200 mt-0.5">{document.pageCount || '1'} page(s)</dd>
+                    <dt className="text-stone-500 font-medium">Page Count</dt>
+                    <dd className="font-semibold text-stone-900 mt-0.5">{document.pageCount || '1'} page(s)</dd>
                   </div>
 
                   <div>
-                    <dt className="text-slate-500">Indexed Chunks</dt>
-                    <dd className="font-medium text-slate-200 mt-0.5 flex items-center gap-1">
-                      <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                    <dt className="text-stone-500 font-medium">Indexed Chunks</dt>
+                    <dd className="font-semibold text-stone-900 mt-0.5 flex items-center gap-1">
+                      <Layers className="w-3.5 h-3.5 text-amber-600" />
                       {document.chunks?.length || 0} chunks indexed
                     </dd>
                   </div>
 
                   <div>
-                    <dt className="text-slate-500">Status</dt>
-                    <dd className="font-medium text-slate-200 mt-0.5">
+                    <dt className="text-stone-500 font-medium">Status</dt>
+                    <dd className="font-semibold text-stone-900 mt-0.5">
                       {document.status === 'READY' ? (
-                        <span className="text-emerald-400">Ready for Q&A</span>
+                        <span className="text-emerald-600">Ready for Q&A</span>
                       ) : document.status === 'FAILED' ? (
-                        <span className="text-rose-400">Processing Failed</span>
+                        <span className="text-rose-600">Processing Failed</span>
                       ) : (
-                        <span className="text-blue-400">Processing...</span>
+                        <span className="text-blue-600">Processing...</span>
                       )}
                     </dd>
                   </div>
@@ -279,13 +274,13 @@ function DocumentViewerContent() {
               </div>
 
               {/* Chunks Preview */}
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 backdrop-blur-xl">
+              <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                  <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-amber-600" />
                     Segments & Pages
                   </h3>
-                  <span className="text-[10px] text-slate-500">
+                  <span className="text-[10px] text-stone-500 font-medium">
                     {document.chunks?.length || 0} total
                   </span>
                 </div>
@@ -295,21 +290,21 @@ function DocumentViewerContent() {
                     document.chunks.map((chunk: any) => (
                       <div
                         key={chunk.id}
-                        className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs"
+                        className="p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs"
                       >
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                          <span className="font-medium text-indigo-300">Chunk #{chunk.chunkIndex + 1}</span>
-                          <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-slate-400">
+                        <div className="flex items-center justify-between text-[11px] text-stone-500 mb-1">
+                          <span className="font-semibold text-amber-800">Chunk #{chunk.chunkIndex + 1}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-white border border-stone-200 text-[10px] text-stone-600 font-medium">
                             Page {chunk.pageStart || chunk.pageNumber || 1}
                           </span>
                         </div>
-                        <p className="text-slate-400 text-[11px] line-clamp-2">
+                        <p className="text-stone-600 text-[11px] line-clamp-2">
                           {chunk.text || chunk.content}
                         </p>
                       </div>
                     ))
                   ) : (
-                    <p className="text-xs text-slate-500 text-center py-4">No chunks indexed yet.</p>
+                    <p className="text-xs text-stone-400 text-center py-4">No chunks indexed yet.</p>
                   )}
                 </div>
               </div>
@@ -325,8 +320,8 @@ export default function DocumentViewerPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mr-2" />
+        <div className="min-h-screen bg-[#fafaf9] flex items-center justify-center text-stone-500">
+          <Loader2 className="w-8 h-8 animate-spin text-amber-500 mr-2" />
           Loading document viewer...
         </div>
       }
