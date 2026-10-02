@@ -77,10 +77,6 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
 
-  // Assistant Persona & User Customization
-  const [userName, setUserName] = useState('Jay');
-  const [isEditingUser, setIsEditingUser] = useState(false);
-
   // Documents & Selection
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>(initialDocumentId ? [initialDocumentId] : []);
@@ -438,41 +434,12 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
 
             {/* 2. Greeting & High-Impact Headline */}
             <div className="mt-auto mb-3 sm:mb-4 text-left">
-              {/* Sub-greeting */}
-              <p className="text-[14px] sm:text-[15px] font-normal text-neutral-500 tracking-normal flex items-center flex-wrap">
-                <span>Hi&nbsp;</span>
-                <span
-                  onClick={() => setIsEditingUser(!isEditingUser)}
-                  className="font-bold text-neutral-900 cursor-pointer hover:underline"
-                  title="Click to change name"
-                >
-                  {userName},
-                </span>
-                <span>&nbsp;I&apos;m&nbsp;</span>
-                <span className="text-amber-500 font-bold">Anna!</span>
-                <span>&nbsp;Your personal assistant.</span>
+              {/* General Legal AI Sub-greeting */}
+              <p className="text-[14px] sm:text-[15px] font-medium text-neutral-500 tracking-normal flex items-center gap-1.5">
+                <span>Contract Intelligence</span>
+                <span className="text-neutral-300">•</span>
+                <span className="text-amber-600 font-semibold">AI Legal Assistant</span>
               </p>
-
-              {/* Inline User Name Editor */}
-              {isEditingUser && (
-                <div className="mt-1.5 flex items-center space-x-2">
-                  <span className="text-xs text-neutral-400">Edit Name:</span>
-                  <input
-                    type="text"
-                    value={userName}
-                    onChange={(e) => setUserName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingUser(false)}
-                    className="text-xs font-semibold px-2 py-0.5 bg-white border border-neutral-300 rounded-md text-neutral-900 outline-none focus:ring-1 focus:ring-amber-500"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => setIsEditingUser(false)}
-                    className="text-xs px-2 py-0.5 bg-neutral-900 text-white rounded-md font-medium"
-                  >
-                    Done
-                  </button>
-                </div>
-              )}
 
               {/* Bold 2-Line Headline (Exact line breaks and typography) */}
               <h1 className="text-[34px] sm:text-[42px] md:text-[46px] font-extrabold tracking-[-0.035em] text-neutral-900 leading-[1.06] mt-2">
@@ -763,21 +730,6 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                 </button>
               </div>
 
-              {/* User Persona Setting */}
-              <div className="bg-neutral-50 rounded-2xl p-3 border border-neutral-100 space-y-2">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                  User Greeting
-                </label>
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs text-neutral-500">Name:</span>
-                  <input
-                    type="text"
-                    value={userName}
-                    onChange={(e) => setUserName(e.target.value)}
-                    className="text-xs font-semibold px-2 py-1 bg-white border border-neutral-200 rounded-md flex-1 text-neutral-900"
-                  />
-                </div>
-              </div>
 
               {/* Document Selector */}
               <div className="space-y-2">
