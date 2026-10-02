@@ -60,8 +60,11 @@ export class RetrievalService {
         data: chunks.map((c, idx) => ({
           documentId,
           chunkIndex: idx,
+          text: c.content,
           content: c.content,
           pageNumber: c.pageNumber,
+          pageStart: c.pageNumber,
+          pageEnd: c.pageNumber,
         })),
       });
     }
@@ -77,7 +80,8 @@ export class RetrievalService {
     const queryTokens = query.toLowerCase().split(/\s+/).filter(Boolean);
 
     const scored = chunks.map((chunk) => {
-      const lower = chunk.content.toLowerCase();
+      const chunkText = chunk.text || chunk.content || '';
+      const lower = chunkText.toLowerCase();
       let matchCount = 0;
       for (const token of queryTokens) {
         if (lower.includes(token)) matchCount += 1;
@@ -86,8 +90,8 @@ export class RetrievalService {
       return {
         id: chunk.id,
         chunkIndex: chunk.chunkIndex,
-        content: chunk.content,
-        pageNumber: chunk.pageNumber,
+        content: chunkText,
+        pageNumber: chunk.pageStart || chunk.pageNumber,
         score,
       };
     });

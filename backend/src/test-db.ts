@@ -19,6 +19,7 @@ async function testDatabase() {
           create: [
             {
               chunkIndex: 0,
+              text: 'This Master Services Agreement is entered into by and between Company A and Company B.',
               content: 'This Master Services Agreement is entered into by and between Company A and Company B.',
               pageNumber: 1,
             },

@@ -30,7 +30,12 @@ model DocumentChunk {
   documentId  String
   document    Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
   chunkIndex  Int
-  content     String     @db.Text
+  text        String     @db.Text
+  content     String?    @db.Text
+  pageStart   Int?
+  pageEnd     Int?
+  charStart   Int?
+  charEnd     Int?
   pageNumber  Int?
   metadata    Json?
   createdAt   DateTime   @default(now())

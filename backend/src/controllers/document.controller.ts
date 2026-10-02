@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { documentService } from '../services/document.service';
 import { extractionService } from '../services/extraction.service';
 import { retrievalService } from '../services/retrieval.service';
+import { chunkingService } from '../services/chunking.service';
 
 export const uploadDocument = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -69,7 +70,7 @@ export const uploadDocument = async (req: Request, res: Response, next: NextFunc
     }
 
     // 4. Chunk & Index for Retrieval
-    const chunkCount = await retrievalService.indexDocument(document.id, extractionResult.text);
+    const chunkCount = await chunkingService.processAndStoreChunks(document.id, extractionResult.text);
 
     // 5. Update Document status to READY
     const updatedDoc = await documentService.updateDocument(document.id, {
