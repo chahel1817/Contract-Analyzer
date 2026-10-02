@@ -96,13 +96,30 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       }
     }
 
+    interface VerifiedCitationRecord {
+      documentId: string;
+      documentTitle: string;
+      quote: string;
+      verified: boolean;
+      isVerified: boolean;
+      startOffset: number;
+      endOffset: number;
+      startIndex: number;
+      endIndex: number;
+      pageStart?: number | null;
+      pageEnd?: number | null;
+      pageNumber?: number | null;
+      chunkId: string | null;
+      confidence: number;
+    }
+
     // Helper to verify candidate quotes against each document
     // "Every citation retains its documentId and is verified against that document only."
-    const verifyCandidateQuoteAcrossDocuments = (candidateQuote: string) => {
+    const verifyCandidateQuoteAcrossDocuments = (candidateQuote: string): VerifiedCitationRecord | null => {
       for (const doc of documents) {
         const rawDocText = doc.extractedText || '';
         const verification = citationService.verifyQuote(candidateQuote, rawDocText, doc.chunks);
-        if (verification.verified) {
+        if (verification.verified && verification.startOffset !== null && verification.endOffset !== null) {
           return {
             documentId: doc.id,
             documentTitle: doc.title || doc.fileName,
@@ -122,23 +139,8 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
         }
       }
 
-      // Not found in any of the selected documents (hallucinated / unverified)
-      return {
-        documentId: documents[0].id,
-        documentTitle: documents[0].title || documents[0].fileName,
-        quote: candidateQuote,
-        verified: false,
-        isVerified: false,
-        startOffset: null,
-        endOffset: null,
-        startIndex: null,
-        endIndex: null,
-        pageStart: null,
-        pageEnd: null,
-        pageNumber: null,
-        chunkId: null,
-        confidence: 0,
-      };
+      // Not found in any of the selected documents (hallucinated / unverified) -> return null to drop
+      return null;
     };
 
     // ==========================================
@@ -192,12 +194,17 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       }
 
       sendSse('status', { message: 'Verifying quotes against respective contracts...' });
-      const verifiedCitationsData = [];
+      const verifiedCitationsData: VerifiedCitationRecord[] = [];
 
       for (const candidateQuote of aiResult.candidateQuotes) {
         if (!candidateQuote || !candidateQuote.trim()) continue;
         const citData = verifyCandidateQuoteAcrossDocuments(candidateQuote);
-        verifiedCitationsData.push(citData);
+        // Filter out unverified quotes: retain only 100% verified citations
+        if (citData && citData.verified) {
+          if (!verifiedCitationsData.some((c) => c.quote === citData.quote && c.documentId === citData.documentId)) {
+            verifiedCitationsData.push(citData);
+          }
+        }
       }
 
       const assistantMessage = await prisma.message.create({
@@ -251,12 +258,17 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
     // ==========================================
     const aiResult = await aiService.generateAnswer(query, allRetrievedChunks);
 
-    const verifiedCitationsData = [];
+    const verifiedCitationsData: VerifiedCitationRecord[] = [];
 
     for (const candQuote of aiResult.quotes) {
       if (!candQuote.text || candQuote.text.trim().length === 0) continue;
       const citData = verifyCandidateQuoteAcrossDocuments(candQuote.text);
-      verifiedCitationsData.push(citData);
+      // Filter out unverified quotes: retain only 100% verified citations
+      if (citData && citData.verified) {
+        if (!verifiedCitationsData.some((c) => c.quote === citData.quote && c.documentId === citData.documentId)) {
+          verifiedCitationsData.push(citData);
+        }
+      }
     }
 
     const assistantMessage = await prisma.message.create({

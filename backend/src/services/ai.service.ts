@@ -20,18 +20,164 @@ export interface GeneratedAnswer {
   quotes: QuoteOutput[];
 }
 
-const AnswerSchema = z.object({
-  answer: z
-    .string()
-    .describe('A comprehensive, direct answer to the user question based strictly on the provided contract excerpts.'),
-  quotes: z
-    .array(
-      z.object({
-        text: z.string().describe('Exact verbatim quote from the excerpts supporting the answer. Must not be paraphrased.'),
-      })
-    )
-    .describe('List of exact verbatim quotes extracted from the contract excerpts.'),
+export const AnswerSchema = z.object({
+  answer: z.string().min(1),
+  quotes: z.array(
+    z.object({
+      text: z.string().min(1),
+    })
+  ),
 });
+
+export const PRODUCTION_SYSTEM_PROMPT = `You are a Contract Analysis AI.
+
+Your job is to answer questions using ONLY the contract/document content provided to you as context.
+
+STRICT RULES:
+
+1. DOCUMENT-ONLY
+- Use only information explicitly present in the provided contract context.
+- Do not use general legal knowledge, outside knowledge, assumptions, or information from other documents.
+- Never invent names, dates, amounts, deadlines, obligations, or other contract terms.
+
+2. ANSWER THE EXACT QUESTION
+- First determine exactly what the user is asking.
+- Give a direct answer to that question.
+- Do not provide unrelated contract information.
+- Do not repeat the same sentence or paragraph.
+- Do not say "based on the provided excerpts" unless necessary.
+- Do not mention your internal retrieval process.
+
+3. HANDLE MISSING INFORMATION CORRECTLY
+If the contract does not contain the specific information requested:
+- Clearly say that the specific information is not stated in the provided contract.
+- If the contract explains WHERE that information is defined, state that location.
+- Do not guess or infer the missing value.
+
+Example:
+If asked:
+"What is the exact contract duration?"
+
+And the contract says:
+"Applicable Term means the Service term stated in an Order Schedule."
+
+Then answer:
+"The specific duration is not stated in the SaaS Agreement itself. The Applicable Term is determined by the Service term specified in the applicable Order Schedule."
+
+Do NOT invent a duration.
+
+4. USE CONTRACT TERMINOLOGY
+- Preserve the terminology used by the contract.
+- If the contract defines a term such as "Applicable Term", "Customer Data", or "Authorized User", use that exact terminology.
+- Do not replace contract-specific terminology with vague alternatives.
+
+5. EVIDENCE / QUOTES
+For every factual answer, provide one or more exact quotes from the provided contract context that directly support the answer.
+
+Quotes must:
+- Be copied exactly from the provided contract text.
+- Not be paraphrased.
+- Not be combined from unrelated sentences.
+- Not contain information that is not present in the contract.
+- Be as short as reasonably possible while still proving the answer.
+
+6. NEVER TRUST AI-GENERATED LOCATIONS
+Do not invent page numbers, character offsets, section locations, or citation positions.
+Return only the quote text.
+The application will independently verify the quote against the original document and determine its location.
+
+7. MULTIPLE POSSIBLE CLAUSES
+If multiple clauses are relevant:
+- Identify the main rule first.
+- Then explain the relevant exception or additional condition.
+- Provide supporting quotes for each important point.
+
+8. CONTRACT-SPECIFIC AMBIGUITY
+If the contract contains placeholders such as:
+[Fee Amount]
+[Effective Date]
+[Customer Name]
+[Renewal Period]
+
+treat them as unspecified values.
+
+For example:
+"The agreement specifies a renewal period placeholder, but does not provide the actual renewal period."
+
+Never replace placeholders with assumed values.
+
+9. DO NOT OVERSTATE
+Distinguish between:
+- what the contract explicitly states
+- what the contract does not state
+
+Do not say "the contract requires X" unless the contract explicitly supports that statement.
+
+10. ANSWER STYLE
+Use this structure:
+
+Answer:
+<direct answer in 1–3 concise paragraphs>
+
+Evidence:
+- "<exact quote from contract>"
+- "<exact quote if another clause is necessary>"
+
+Keep the answer concise unless the user asks for detailed analysis.
+
+11. IF THE ANSWER IS NOT IN THE DOCUMENT
+Return:
+
+Answer:
+"The contract does not specify [requested information]."
+
+Then, if useful:
+
+"The contract does state [related information that is actually present]."
+
+Evidence:
+- "<exact supporting quote>"
+
+12. NO HALLUCINATIONS
+The following are prohibited:
+- guessing missing values
+- using outside legal knowledge
+- assuming industry-standard terms
+- fabricating clauses
+- fabricating quotes
+- fabricating page numbers
+- fabricating section numbers
+- claiming that something exists in the contract when it does not
+
+Your highest priority is factual accuracy and faithful representation of the contract.`;
+
+/**
+ * Formats retrieved chunks cleanly grouped under:
+ * DOCUMENT:
+ * <docName>
+ * 
+ * DOCUMENT CONTENT:
+ * [chunk 1]
+ * 
+ * [chunk 2]
+ */
+export function formatContractContext(chunks: ChunkInput[]): string {
+  const docsMap = new Map<string, string[]>();
+  for (const c of chunks) {
+    const docName = c.documentTitle || 'Contract Document';
+    if (!docsMap.has(docName)) {
+      docsMap.set(docName, []);
+    }
+    docsMap.get(docName)!.push(c.text.trim());
+  }
+
+  const sections: string[] = [];
+  for (const [docName, chunkTexts] of docsMap.entries()) {
+    sections.push(`DOCUMENT:\n${docName}\n\nDOCUMENT CONTENT:\n${chunkTexts.join('\n\n')}`);
+  }
+
+  return sections.join('\n\n====================\n\n');
+}
 
 export class AiService {
   public getApiKey(): string {
@@ -76,17 +222,13 @@ export class AiService {
 
     if (!chunks || chunks.length === 0) {
       return {
-        answer: 'I could not find any relevant sections in the document to answer your question.',
+        answer: 'The contract does not specify information to answer this question.',
         quotes: [],
       };
     }
 
-    const context = chunks
-      .map((c, i) => {
-        const docTag = c.documentTitle ? `[Contract: "${c.documentTitle}"] ` : '';
-        return `--- Excerpt ${i + 1} (${docTag}Page ${c.pageStart || 1}) ---\n${c.text}`;
-      })
-      .join('\n\n');
+    const formattedContext = formatContractContext(chunks);
+    const userPrompt = `${formattedContext}\n\nUSER QUESTION:\n${question}`;
 
     // 1. If AI API key is configured (OpenRouter, OpenAI, etc.)
     if (this.isConfigured()) {
@@ -98,29 +240,15 @@ export class AiService {
         const { object } = await generateObject({
           model: client(modelName),
           schema: AnswerSchema,
-          prompt: `You are an expert legal contract analyst AI.
-Your role is to answer questions about legal contracts with 100% fidelity to the provided text.
-
-CRITICAL RULES:
-1. Base your answer EXCLUSIVELY on the provided contract excerpts below.
-2. Every factual statement or claim in your answer MUST be supported by one or more exact quotes in the "quotes" array.
-3. Every item in the "quotes" array MUST be an EXACT, literal quote copied word-for-word from the excerpts. Do NOT paraphrase, summarize, or alter words inside quotes.
-4. If the answer cannot be found in the provided excerpts, state: "The provided contract sections do not contain information to answer this question." and return an empty quotes array [].
-5. Never invent or hallucinate clauses, numbers, or dates not explicitly written in the excerpts.
-6. When excerpts come from multiple contracts, compare and contrast the terms across the contracts directly rather than listing separate answers, and explicitly identify which contract each finding relates to.
-
-Context Excerpts:
-${context}
-
-User Question:
-${question}`,
+          system: PRODUCTION_SYSTEM_PROMPT,
+          prompt: userPrompt,
         });
 
         const lowerAns = object.answer.toLowerCase();
-        const isNotFound = lowerAns.includes('do not contain') || lowerAns.includes('could not find') || lowerAns.includes('cannot be found');
+        const isNotFound = lowerAns.includes('does not specify') || lowerAns.includes('not stated') || lowerAns.includes('could not find');
 
         return {
-          answer: object.answer,
+          answer: object.answer.trim(),
           quotes: isNotFound ? [] : object.quotes.map((q) => ({ text: q.text.trim() })).filter((q) => q.text.length > 0),
         };
       } catch (structuredErr: any) {
@@ -131,21 +259,15 @@ ${question}`,
         try {
           const { text } = await generateText({
             model: client(modelName),
-            system: `You are an expert legal contract analyst AI. You MUST output ONLY a valid raw JSON object conforming to this exact structure:
+            system: `${PRODUCTION_SYSTEM_PROMPT}\n\nYou MUST output ONLY a valid JSON object conforming exactly to this structure:
 {
-  "answer": "your direct answer based strictly on the excerpts",
+  "answer": "your direct answer based strictly on the contract text",
   "quotes": [
-    { "text": "exact verbatim quote copied directly from text" }
+    { "text": "exact verbatim quote copied directly from contract text" }
   ]
 }
-Do not write markdown fences, backticks, or any conversational text outside the JSON. Only output valid JSON.`,
-            prompt: `Context Excerpts:
-${context}
-
-User Question:
-${question}
-
-Remember: quotes must be exact literal excerpts. Output JSON only:`,
+Do not write markdown fences, backticks, or any text outside the JSON. Output valid JSON only.`,
+            prompt: `${userPrompt}\n\nOutput JSON only:`,
           });
 
           // Extract JSON from response (handles optional code block wrappers)
@@ -159,10 +281,10 @@ Remember: quotes must be exact literal excerpts. Output JSON only:`,
             const parsed = JSON.parse(jsonMatch[0]);
             if (parsed.answer && Array.isArray(parsed.quotes)) {
               const lowerAns = String(parsed.answer).toLowerCase();
-              const isNotFound = lowerAns.includes('do not contain') || lowerAns.includes('could not find') || lowerAns.includes('cannot be found');
+              const isNotFound = lowerAns.includes('does not specify') || lowerAns.includes('not stated') || lowerAns.includes('could not find');
 
               return {
-                answer: parsed.answer,
+                answer: parsed.answer.trim(),
                 quotes: isNotFound
                   ? []
                   : parsed.quotes.map((q: any) => ({
@@ -216,13 +338,13 @@ Remember: quotes must be exact literal excerpts. Output JSON only:`,
 
     if (bestScore <= 0 || !bestSentence) {
       return {
-        answer: 'The provided contract excerpts do not contain sufficient information to answer this question.',
+        answer: 'The contract does not specify the requested information.',
         quotes: [],
       };
     }
 
     return {
-      answer: `Based on the contract text: ${bestSentence}`,
+      answer: bestSentence,
       quotes: [
         {
           text: bestSentence,
@@ -249,18 +371,12 @@ Remember: quotes must be exact literal excerpts. Output JSON only:`,
     }
 
     if (!chunks || chunks.length === 0) {
-      const msg = 'I could not find any relevant sections in the document to answer your question.';
+      const msg = 'The contract does not specify information to answer this question.';
       options?.onDelta?.(msg);
       return { answer: msg, candidateQuotes: [] };
     }
 
-    const context = chunks
-      .map((c, i) => {
-        const docTag = c.documentTitle ? `[Contract: "${c.documentTitle}"] ` : '';
-        return `--- Excerpt ${i + 1} (${docTag}Page ${c.pageStart || 1}) ---\n${c.text}`;
-      })
-      .join('\n\n');
-
+    const formattedContext = formatContractContext(chunks);
     let fullAnswer = '';
 
     if (this.isConfigured()) {
@@ -270,22 +386,8 @@ Remember: quotes must be exact literal excerpts. Output JSON only:`,
 
         const result = streamText({
           model: client(modelName),
-          system: `You are an expert legal contract analyst AI.
-Your role is to answer questions about legal contracts with 100% fidelity to the provided contract excerpts.
-
-CRITICAL RULES:
-1. Base your answer EXCLUSIVELY on the provided excerpts.
-2. When referencing specific contractual clauses, obligations, numbers, or rules, wrap exact verbatim quotes in quotation marks "like this".
-3. Never invent or hallucinate terms not found in the excerpts.
-4. Keep the answer direct, authoritative, and well-structured.
-5. When excerpts come from multiple contracts, compare and contrast the terms across the contracts directly rather than listing separate answers, and explicitly identify which contract each finding relates to.`,
-          prompt: `Context Excerpts:
-${context}
-
-User Question:
-${question}
-
-Answer:`,
+          system: PRODUCTION_SYSTEM_PROMPT,
+          prompt: `${formattedContext}\n\nUSER QUESTION:\n${question}`,
           abortSignal: options?.signal,
         });
 
@@ -330,22 +432,33 @@ Answer:`,
   }
 
   /**
-   * Extracts candidate verbatim quotes from the generated answer and chunks
+   * Extracts candidate verbatim quotes from the generated answer and chunks.
+   * Parses the Evidence section quotes, inline quotes, and matching sentences.
    */
   private extractCandidateQuotes(answerText: string, chunks: ChunkInput[]): string[] {
     const quotes = new Set<string>();
 
-    // 1. Matches quoted strings "..." or “...” in the answer
-    const quotedRegex = /["“]([^"”\r\n]{12,300})["”]/g;
+    // 1. Evidence section quotes (e.g. - "..." or - “...”)
+    const evidenceSection = answerText.split(/Evidence:/i)[1] || '';
+    const bulletRegex = /[-*•]?\s*["“]([^"”\r\n]{6,400})["”]/g;
     let match;
+    while ((match = bulletRegex.exec(evidenceSection)) !== null) {
+      const q = match[1].trim();
+      if (q.length >= 6) {
+        quotes.add(q);
+      }
+    }
+
+    // 2. Matches any quoted strings "..." or “...” in the answer
+    const quotedRegex = /["“]([^"”\r\n]{10,400})["”]/g;
     while ((match = quotedRegex.exec(answerText)) !== null) {
       const candidate = match[1].trim();
-      if (candidate.length >= 12) {
+      if (candidate.length >= 10) {
         quotes.add(candidate);
       }
     }
 
-    // 2. Cross-reference sentences in retrieved chunks that are directly quoted in the answer
+    // 3. Cross-reference sentences in retrieved chunks that are directly quoted in the answer
     for (const chunk of chunks) {
       const sentences = chunk.text.split(/(?<=[.?!])\s+/);
       for (const s of sentences) {

@@ -150,6 +150,8 @@ function MultiDocumentChatContent() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    let accumulatedContent = '';
+
     try {
       await streamChatMessage({
         documentIds: selectedDocIds,
@@ -158,42 +160,51 @@ function MultiDocumentChatContent() {
         signal: controller.signal,
         onStatus: (status) => {
           setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last && last.role === 'assistant') {
-              last.statusText = status;
-            }
-            return updated;
+            const last = prev[prev.length - 1];
+            if (!last || last.role !== 'assistant') return prev;
+            return [
+              ...prev.slice(0, -1),
+              {
+                ...last,
+                statusText: status,
+              },
+            ];
           });
         },
         onDelta: (chunk) => {
+          accumulatedContent += chunk;
+          const currentText = accumulatedContent;
           setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last && last.role === 'assistant') {
-              last.content = (last.content || '') + chunk;
-              last.isStreaming = true;
-            }
-            return updated;
+            const last = prev[prev.length - 1];
+            if (!last || last.role !== 'assistant') return prev;
+            return [
+              ...prev.slice(0, -1),
+              {
+                ...last,
+                content: currentText,
+                isStreaming: true,
+              },
+            ];
           });
         },
         onDone: (data) => {
           if (data.conversationId) {
             setConversationId(data.conversationId);
           }
-
+          const finalAnswer = data.answer && data.answer.trim().length > 0 ? data.answer : accumulatedContent;
           setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last && last.role === 'assistant') {
-              last.isStreaming = false;
-              last.statusText = undefined;
-              last.citations = data.citations || [];
-              if (data.answer && (!last.content || last.content.length < 5)) {
-                last.content = data.answer;
-              }
-            }
-            return updated;
+            const last = prev[prev.length - 1];
+            if (!last || last.role !== 'assistant') return prev;
+            return [
+              ...prev.slice(0, -1),
+              {
+                ...last,
+                content: finalAnswer,
+                isStreaming: false,
+                statusText: undefined,
+                citations: data.citations || [],
+              },
+            ];
           });
 
           setIsGenerating(false);

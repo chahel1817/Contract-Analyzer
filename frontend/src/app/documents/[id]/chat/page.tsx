@@ -169,6 +169,7 @@ export default function DocumentChatPage() {
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    let accumulatedContent = '';
 
     try {
       await streamChatMessage({
@@ -184,12 +185,14 @@ export default function DocumentChatPage() {
           );
         },
         onDelta: (delta) => {
+          accumulatedContent += delta;
+          const currentText = accumulatedContent;
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMessageId
                 ? {
                     ...m,
-                    content: m.content + delta,
+                    content: currentText,
                     statusText: undefined,
                   }
                 : m
@@ -200,13 +203,14 @@ export default function DocumentChatPage() {
           if (data.conversationId) {
             setActiveConversationId(data.conversationId);
           }
+          const finalAnswer = data.assistantMessage?.content || data.answer || accumulatedContent;
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMessageId
                 ? {
                     ...m,
                     id: data.assistantMessage?.id || m.id,
-                    content: data.assistantMessage?.content || data.answer || m.content || '',
+                    content: finalAnswer,
                     citations: data.citations || data.assistantMessage?.citations || [],
                     isStreaming: false,
                     statusText: undefined,
