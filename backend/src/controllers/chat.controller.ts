@@ -11,8 +11,9 @@ import { citationService } from '../services/citation.service';
  */
 export const sendMessage = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { documentId, question, message, conversationId } = req.body;
+    const { documentId, question, message, conversationId, stream } = req.body;
     const query = (question || message || '').trim();
+    const isStreamRequested = stream === true || req.headers.accept?.includes('text/event-stream');
 
     if (!documentId) {
       return res.status(400).json({ success: false, error: 'documentId is required' });
@@ -65,10 +66,133 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       },
     });
 
-    // 4. Retrieval: Search relevant chunks
+    const rawDocumentText = document.extractedText || '';
+
+    // ==========================================
+    // STREAMING FLOW (SSE)
+    // ==========================================
+    if (isStreamRequested) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+
+      const sendSse = (event: string, data: any) => {
+        if (!res.writableEnded) {
+          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        }
+      };
+
+      // Send initial user message & conversation ID
+      sendSse('userMessage', {
+        conversationId: conversation.id,
+        userMessage,
+      });
+
+      // 4. Retrieval: Search relevant chunks
+      sendSse('status', { message: 'Searching contract clauses...' });
+      const relevantChunks = await retrievalService.searchDocument(query, documentId, 5);
+      sendSse('status', {
+        message: `Found ${relevantChunks.length} relevant sections. Generating answer...`,
+      });
+
+      // Abort controller for Stop generation
+      const abortController = new AbortController();
+      let isAborted = false;
+      req.on('close', () => {
+        isAborted = true;
+        abortController.abort();
+      });
+
+      // 5. Stream AI answer
+      const aiResult = await aiService.streamAnswer(
+        query,
+        relevantChunks.map((c) => ({
+          id: c.id,
+          text: c.text,
+          pageStart: c.pageStart,
+          chunkIndex: c.chunkIndex,
+        })),
+        {
+          signal: abortController.signal,
+          onDelta: (delta: string) => {
+            sendSse('delta', { text: delta });
+          },
+        }
+      );
+
+      if (isAborted) {
+        return res.end();
+      }
+
+      // 6. Quote Verification: verify candidate quotes
+      sendSse('status', { message: 'Verifying quotes against original document...' });
+      const verifiedCitationsData = [];
+
+      for (const candidateQuote of aiResult.candidateQuotes) {
+        if (!candidateQuote || !candidateQuote.trim()) continue;
+
+        const verification = citationService.verifyQuote(
+          candidateQuote,
+          rawDocumentText,
+          document.chunks
+        );
+
+        verifiedCitationsData.push({
+          documentId,
+          quote: verification.quote,
+          verified: verification.verified,
+          isVerified: verification.verified,
+          startOffset: verification.startOffset,
+          endOffset: verification.endOffset,
+          startIndex: verification.startOffset,
+          endIndex: verification.endOffset,
+          pageStart: verification.pageStart,
+          pageEnd: verification.pageEnd,
+          pageNumber: verification.pageStart,
+          chunkId: verification.chunkId || null,
+          confidence: verification.confidence,
+        });
+      }
+
+      // 7. Citation storage: Save Assistant Message with verified citations
+      const assistantMessage = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'assistant',
+          content: aiResult.answer,
+          citations: {
+            create: verifiedCitationsData,
+          },
+        },
+        include: {
+          citations: true,
+        },
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      });
+
+      sendSse('done', {
+        success: true,
+        conversationId: conversation.id,
+        userMessage,
+        assistantMessage,
+        answer: aiResult.answer,
+        citations: assistantMessage.citations,
+        retrievedChunksCount: relevantChunks.length,
+      });
+
+      return res.end();
+    }
+
+    // ==========================================
+    // NON-STREAMING (STANDARD JSON)
+    // ==========================================
     const relevantChunks = await retrievalService.searchDocument(query, documentId, 5);
 
-    // 5. AI Generation: generate structured answer + candidate quotes
     const aiResult = await aiService.generateAnswer(
       query,
       relevantChunks.map((c) => ({
@@ -79,8 +203,6 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       }))
     );
 
-    // 6. Quote Verification: verify each quote against the original document text
-    const rawDocumentText = document.extractedText || '';
     const verifiedCitationsData = [];
 
     for (const candQuote of aiResult.quotes) {
@@ -109,7 +231,6 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       });
     }
 
-    // 7. Citation storage: Save Assistant Message with verified citations
     const assistantMessage = await prisma.message.create({
       data: {
         conversationId: conversation.id,
@@ -124,7 +245,6 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       },
     });
 
-    // Touch conversation updatedAt timestamp
     await prisma.conversation.update({
       where: { id: conversation.id },
       data: { updatedAt: new Date() },

@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { generateObject, generateText } from 'ai';
+import { generateObject, generateText, streamText } from 'ai';
 import { z } from 'zod';
 
 export interface ChunkInput {
@@ -218,6 +218,130 @@ Remember: quotes must be exact literal excerpts. Output JSON only:`,
   }
 
   /**
+   * Streams an AI answer token-by-token and extracts candidate verbatim quotes for verification.
+   */
+  async streamAnswer(
+    question: string,
+    chunks: ChunkInput[],
+    options?: {
+      signal?: AbortSignal;
+      onDelta?: (delta: string) => void;
+    }
+  ): Promise<{ answer: string; candidateQuotes: string[] }> {
+    if (!question || !question.trim()) {
+      const msg = 'Please provide a valid question regarding the contract.';
+      options?.onDelta?.(msg);
+      return { answer: msg, candidateQuotes: [] };
+    }
+
+    if (!chunks || chunks.length === 0) {
+      const msg = 'I could not find any relevant sections in the document to answer your question.';
+      options?.onDelta?.(msg);
+      return { answer: msg, candidateQuotes: [] };
+    }
+
+    const context = chunks
+      .map((c, i) => `--- Excerpt ${i + 1} (Page ${c.pageStart || 1}) ---\n${c.text}`)
+      .join('\n\n');
+
+    let fullAnswer = '';
+
+    if (this.isConfigured()) {
+      try {
+        const client = this.getClient();
+        const modelName = this.getModel();
+
+        const result = streamText({
+          model: client(modelName),
+          system: `You are an expert legal contract analyst AI.
+Your role is to answer questions about legal contracts with 100% fidelity to the provided contract excerpts.
+
+CRITICAL RULES:
+1. Base your answer EXCLUSIVELY on the provided excerpts.
+2. When referencing specific contractual clauses, obligations, numbers, or rules, wrap exact verbatim quotes in quotation marks "like this".
+3. Never invent or hallucinate terms not found in the excerpts.
+4. Keep the answer direct, authoritative, and well-structured.`,
+          prompt: `Context Excerpts:
+${context}
+
+User Question:
+${question}
+
+Answer:`,
+          abortSignal: options?.signal,
+        });
+
+        for await (const chunk of result.textStream) {
+          if (options?.signal?.aborted) break;
+          fullAnswer += chunk;
+          options?.onDelta?.(chunk);
+        }
+      } catch (err: any) {
+        if (options?.signal?.aborted) {
+          return { answer: fullAnswer, candidateQuotes: [] };
+        }
+        console.warn('streamText failed, falling back to deterministic stream:', err.message);
+      }
+    }
+
+    // Fallback if fullAnswer is empty (due to missing key, failure, or rate limit)
+    if (!fullAnswer.trim()) {
+      const fallback = this.generateDeterministicFallback(question, chunks);
+      const words = fallback.answer.split(' ');
+      for (let i = 0; i < words.length; i++) {
+        if (options?.signal?.aborted) break;
+        const piece = i === words.length - 1 ? words[i] : words[i] + ' ';
+        fullAnswer += piece;
+        options?.onDelta?.(piece);
+        // Small delay to simulate streaming
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      return {
+        answer: fullAnswer,
+        candidateQuotes: fallback.quotes.map((q) => q.text),
+      };
+    }
+
+    // Extract candidate quotes from fullAnswer and retrieved chunks
+    const candidateQuotes = this.extractCandidateQuotes(fullAnswer, chunks);
+
+    return {
+      answer: fullAnswer,
+      candidateQuotes,
+    };
+  }
+
+  /**
+   * Extracts candidate verbatim quotes from the generated answer and chunks
+   */
+  private extractCandidateQuotes(answerText: string, chunks: ChunkInput[]): string[] {
+    const quotes = new Set<string>();
+
+    // 1. Matches quoted strings "..." or “...” in the answer
+    const quotedRegex = /["“]([^"”\r\n]{12,300})["”]/g;
+    let match;
+    while ((match = quotedRegex.exec(answerText)) !== null) {
+      const candidate = match[1].trim();
+      if (candidate.length >= 12) {
+        quotes.add(candidate);
+      }
+    }
+
+    // 2. Cross-reference sentences in retrieved chunks that are directly quoted in the answer
+    for (const chunk of chunks) {
+      const sentences = chunk.text.split(/(?<=[.?!])\s+/);
+      for (const s of sentences) {
+        const sentence = s.trim();
+        if (sentence.length >= 25 && answerText.toLowerCase().includes(sentence.toLowerCase())) {
+          quotes.add(sentence);
+        }
+      }
+    }
+
+    return Array.from(quotes);
+  }
+
+  /**
    * Summarizes a contract using configured AI provider or fallback
    */
   async summarizeContract(text: string): Promise<string> {
@@ -243,3 +367,4 @@ ${text.slice(0, 25000)}`,
 }
 
 export const aiService = new AiService();
+
