@@ -196,7 +196,7 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
     setError(null);
     setQuery('');
     setIsGenerating(true);
-    setStatusText('Anna is thinking...');
+    setStatusText('Lexi is thinking...');
 
     // Optimistically add user message
     const tempUserMsg: ChatMessage = {
@@ -423,7 +423,7 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
               >
                 <Image
                   src="/anna-orb-hd.png"
-                  alt="Anna AI Assistant Orb"
+                  alt="Lexi AI Assistant Orb"
                   width={260}
                   height={260}
                   priority
@@ -484,14 +484,14 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                 >
                   <Image
                     src="/anna-orb-hd.png"
-                    alt="Anna AI Assistant Orb"
+                    alt="Lexi AI Assistant Orb"
                     width={40}
                     height={40}
                     className="w-full h-full object-contain filter drop-shadow-[0_4px_10px_rgba(245,158,11,0.4)]"
                   />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-neutral-900">Anna</h3>
+                  <h3 className="text-xs font-bold text-neutral-900">Lexi</h3>
                   <p className="text-[11px] text-neutral-500 flex items-center">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1"></span>
                     {statusText || (isGenerating ? 'Analyzing contracts...' : 'Ready to assist')}
@@ -533,7 +533,7 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                       {msg.isStreaming && !msg.content && (
                         <div className="flex items-center space-x-1.5 py-1 text-neutral-400 text-xs">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
-                          <span>{statusText || 'Anna is reviewing contract clauses...'}</span>
+                          <span>{statusText || 'Lexi is reviewing contract clauses...'}</span>
                         </div>
                       )}
                     </div>
@@ -638,7 +638,7 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                     isListening ? 'text-amber-600 bg-amber-100 animate-pulse' : ''
                   }`}
                   aria-label="Voice input"
-                  title={speechSupported ? 'Speak with Anna' : 'Voice input'}
+                  title={speechSupported ? 'Speak with Lexi' : 'Voice input'}
                 >
                   {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </button>
@@ -718,7 +718,7 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                     <Sparkles className="w-4 h-4 text-amber-600" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-neutral-900">Anna Assistant</h2>
+                    <h2 className="text-sm font-bold text-neutral-900">Lexi Assistant</h2>
                     <p className="text-[10px] text-neutral-400">Contracts & Settings</p>
                   </div>
                 </div>

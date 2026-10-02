@@ -40,7 +40,7 @@ export default function ComparePage() {
               className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-neutral-900 text-white hover:bg-black transition flex items-center gap-1.5 shadow-sm"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-current" />
-              <span>Talk to Anna</span>
+              <span>Talk to Lexi</span>
             </Link>
             <Link
               href="/dashboard"

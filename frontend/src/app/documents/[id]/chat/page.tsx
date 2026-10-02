@@ -304,13 +304,13 @@ export default function DocumentChatPage() {
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Talk to Anna shortcut */}
+          {/* Talk to Lexi shortcut */}
           <Link
             href={`/assistant?docId=${id}`}
             className="text-xs h-8 px-3 rounded-xl bg-neutral-900 hover:bg-black text-white flex items-center gap-1.5 font-bold transition shadow-2xs"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-current" />
-            <span className="hidden sm:inline">Anna Assistant</span>
+            <span className="hidden sm:inline">Lexi Assistant</span>
           </Link>
 
           {/* Split-Screen Viewer Toggle */}

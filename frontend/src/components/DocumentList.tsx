@@ -237,7 +237,7 @@ export default function DocumentList({
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                  {/* Talk to Anna */}
+                  {/* Talk to Lexi */}
                   {isReady && (
                     <Link href={`/assistant?docId=${doc.id}`}>
                       <Button
@@ -245,7 +245,7 @@ export default function DocumentList({
                         className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-xs h-8 px-3 rounded-xl flex items-center gap-1.5 shadow-2xs cursor-pointer"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-amber-600 fill-current" />
-                        <span>Talk to Anna</span>
+                        <span>Talk to Lexi</span>
                       </Button>
                     </Link>
                   )}

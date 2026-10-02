@@ -94,7 +94,7 @@ export default function DashboardPage() {
               className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-neutral-900 text-white hover:bg-black transition flex items-center gap-1.5 shadow-sm"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-current" />
-              <span>Talk to Anna</span>
+              <span>Talk to Lexi</span>
             </Link>
             <Link
               href="/dashboard"
@@ -173,7 +173,7 @@ export default function DashboardPage() {
                 <div className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full animate-orb-breathe cursor-pointer">
                   <img
                     src="/anna-orb-hd.png"
-                    alt="Anna AI Assistant Orb"
+                    alt="Lexi AI Assistant Orb"
                     className="w-full h-full object-contain filter drop-shadow-[0_15px_30px_rgba(245,158,11,0.4)] group-hover:scale-105 transition-transform"
                   />
                 </div>

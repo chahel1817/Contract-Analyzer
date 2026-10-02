@@ -281,7 +281,7 @@ function MultiDocumentChatContent() {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-black text-white text-xs font-bold shadow-xs transition"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-current" />
-                <span>Anna Assistant</span>
+                <span>Lexi Assistant</span>
               </Link>
               {documents.length > 0 && (
                 <>
@@ -455,7 +455,7 @@ function MultiDocumentChatContent() {
             className="text-xs h-8 px-3 rounded-xl bg-neutral-900 hover:bg-black text-white flex items-center gap-1.5 font-bold transition shadow-2xs"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-current" />
-            <span className="hidden sm:inline">Anna Assistant</span>
+            <span className="hidden sm:inline">Lexi Assistant</span>
           </Link>
 
           <Button
