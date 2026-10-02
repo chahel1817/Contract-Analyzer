@@ -22,6 +22,7 @@
     "test:comparison": "ts-node-dev --transpile-only src/test-comparison.ts",
     "test:large-doc": "ts-node-dev --transpile-only src/test-large-document.ts",
     "test:agent": "ts-node-dev --transpile-only src/test-agent.ts",
+    "test:errors": "ts-node-dev --transpile-only src/test-error-handling.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

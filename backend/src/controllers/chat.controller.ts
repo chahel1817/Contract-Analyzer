@@ -301,7 +301,13 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       citations: assistantMessage.citations,
       retrievedChunksCount: allRetrievedChunks.length,
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (res.headersSent) {
+      try {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message || 'Stream processing error' })}\n\n`);
+        return res.end();
+      } catch {}
+    }
     next(error);
   }
 };

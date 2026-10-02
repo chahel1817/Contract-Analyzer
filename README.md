@@ -188,4 +188,17 @@ npm run test:multi-doc    # Multi-document selection & chat test
 npm run test:comparison   # Phase 8: Contract clause comparison test
 npm run test:large-doc    # Phase 9: 100-150 page large document test
 npm run test:agent        # Part C Option 2: Agentic document research test
+npm run test:errors       # Requirement 26: Comprehensive 9-scenario error handling test
 ```
+
+### 7. Requirement 26 — Comprehensive Error Handling Matrix
+The platform actively defends against and gracefully handles 9 specific failure modes:
+1. **Invalid File**: Rejects unsupported formats (`.exe`, `.png`, etc.) with HTTP 400 and clear error message.
+2. **Large File**: Enforces 50MB maximum upload limit via Multer middleware and frontend validation.
+3. **Corrupt PDF**: Catches damaged, truncated, or unreadable PDF structures and flags them with HTTP 422.
+4. **Scanned PDF**: Detects image-only documents with no extractable text characters and marks them as `FAILED` (OCR required).
+5. **Extraction Failure**: Gracefully handles parser exceptions, updates the database status to `FAILED`, and records user-friendly error messages.
+6. **AI Failure**: Automatically triggers deterministic fallback synthesis if OpenRouter or LLM encounters rate limits (429), quota limits, or network timeouts.
+7. **Database Failure**: Intercepts Prisma connection timeouts (`P1001`), server unreachability, and constraints in `error.middleware.ts`, returning HTTP 503 without crashing the server.
+8. **Network Failure**: Catches client fetch exceptions, stream aborts, and socket closures, displaying clean error cards and retry buttons.
+9. **No Answer Found**: When an out-of-scope question is asked, explicitly states that the contract does not contain information to answer the question, returning 0 citations rather than hallucinating.

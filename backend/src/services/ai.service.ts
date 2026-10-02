@@ -116,9 +116,12 @@ User Question:
 ${question}`,
         });
 
+        const lowerAns = object.answer.toLowerCase();
+        const isNotFound = lowerAns.includes('do not contain') || lowerAns.includes('could not find') || lowerAns.includes('cannot be found');
+
         return {
           answer: object.answer,
-          quotes: object.quotes.map((q) => ({ text: q.text.trim() })).filter((q) => q.text.length > 0),
+          quotes: isNotFound ? [] : object.quotes.map((q) => ({ text: q.text.trim() })).filter((q) => q.text.length > 0),
         };
       } catch (structuredErr: any) {
         console.warn('generateObject failed on model', modelName, ':', structuredErr.message);
@@ -155,11 +158,16 @@ Remember: quotes must be exact literal excerpts. Output JSON only:`,
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
             if (parsed.answer && Array.isArray(parsed.quotes)) {
+              const lowerAns = String(parsed.answer).toLowerCase();
+              const isNotFound = lowerAns.includes('do not contain') || lowerAns.includes('could not find') || lowerAns.includes('cannot be found');
+
               return {
                 answer: parsed.answer,
-                quotes: parsed.quotes.map((q: any) => ({
-                  text: typeof q === 'string' ? q.trim() : (q.text || '').trim(),
-                })).filter((q: { text: string }) => q.text.length > 0),
+                quotes: isNotFound
+                  ? []
+                  : parsed.quotes.map((q: any) => ({
+                      text: typeof q === 'string' ? q.trim() : (q.text || '').trim(),
+                    })).filter((q: { text: string }) => q.text.length > 0),
               };
             }
           }

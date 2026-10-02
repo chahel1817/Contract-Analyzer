@@ -14,13 +14,39 @@ export interface ExtractionResult {
 export class ExtractionService {
   /**
    * Extract text and page information from a PDF file.
-   * Handles multi-page agreements and detects scanned PDFs with no readable text.
+   * Handles multi-page agreements, detects corrupt PDFs, and detects scanned PDFs with no readable text.
    */
   async extractPDF(filePath: string): Promise<ExtractionResult> {
-    const fileBuffer = await fs.readFile(filePath);
-    const parser = new PDFParse(new Uint8Array(fileBuffer));
-    await parser.load();
-    const parsed = await parser.getText();
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = await fs.readFile(filePath);
+    } catch (readErr: any) {
+      throw new Error(`File read error: ${readErr.message || 'Unable to read file from disk.'}`);
+    }
+
+    // 1. Verify file size and header to catch Corrupt PDFs early
+    if (fileBuffer.length < 15) {
+      throw new Error('Corrupt PDF: The file is empty or too small to be a valid PDF document.');
+    }
+
+    const header = fileBuffer.slice(0, 5).toString('ascii');
+    if (!header.startsWith('%PDF-')) {
+      throw new Error('Corrupt PDF: Missing valid %PDF header. The file structure is damaged or not a valid PDF.');
+    }
+
+    let parsed: any;
+    let parser: any;
+
+    try {
+      parser = new PDFParse(new Uint8Array(fileBuffer));
+      await parser.load();
+      parsed = await parser.getText();
+    } catch (parseErr: any) {
+      if (parser?.destroy) {
+        try { await parser.destroy(); } catch {}
+      }
+      throw new Error(`Corrupt PDF: ${parseErr.message || 'The PDF document structure is corrupted or unreadable.'}`);
+    }
 
     const rawText = parsed.text || '';
     const totalPages = parsed.total || (parsed.pages && parsed.pages.length) || 1;
@@ -49,7 +75,7 @@ export class ExtractionService {
     // If there are no readable text characters or less than 15 characters, it's a scanned PDF
     const isScanned = cleanText.length < 15;
 
-    if (parser.destroy) {
+    if (parser?.destroy) {
       try { await parser.destroy(); } catch {}
     }
 
@@ -69,8 +95,24 @@ export class ExtractionService {
    * Extract text from a DOCX file using mammoth.
    */
   async extractDOCX(filePath: string): Promise<ExtractionResult> {
-    const fileBuffer = await fs.readFile(filePath);
-    const result = await mammoth.extractRawText({ buffer: fileBuffer });
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = await fs.readFile(filePath);
+    } catch (readErr: any) {
+      throw new Error(`File read error: ${readErr.message || 'Unable to read file from disk.'}`);
+    }
+
+    if (fileBuffer.length < 100) {
+      throw new Error('Corrupt DOCX: The file is truncated or too small to be a valid Word document.');
+    }
+
+    let result: any;
+    try {
+      result = await mammoth.extractRawText({ buffer: fileBuffer });
+    } catch (mammothErr: any) {
+      throw new Error(`DOCX extraction failed: ${mammothErr.message || 'Corrupted or unreadable DOCX archive.'}`);
+    }
+
     const text = result.value || '';
     const cleanText = text.replace(/\s+/g, '').trim();
 
@@ -103,7 +145,7 @@ export class ExtractionService {
       return this.extractDOCX(filePath);
     }
 
-    throw new Error(`Unsupported file type: ${ext}. Only PDF and DOCX files are allowed.`);
+    throw new Error(`Invalid file type: ${ext}. Only PDF and DOCX files are allowed.`);
   }
 }
 
