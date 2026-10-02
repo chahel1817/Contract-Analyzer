@@ -21,6 +21,7 @@
     "test:multi-doc": "ts-node-dev --transpile-only src/test-multi-document-chat.ts",
     "test:comparison": "ts-node-dev --transpile-only src/test-comparison.ts",
     "test:large-doc": "ts-node-dev --transpile-only src/test-large-document.ts",
+    "test:agent": "ts-node-dev --transpile-only src/test-agent.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

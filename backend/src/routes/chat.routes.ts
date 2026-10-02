@@ -3,9 +3,13 @@ import {
   sendMessage,
   getConversationsByDocument,
   searchDocumentChunks,
+  agentResearch,
 } from '../controllers/chat.controller';
 
 const router = Router();
+
+// POST /api/chat/agent - Autonomous Agentic Document Research
+router.post('/agent', agentResearch);
 
 // POST /api/chat - Send message, retrieve chunks, query AI, verify quotes, store citations
 router.post('/', sendMessage);

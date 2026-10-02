@@ -3,6 +3,7 @@ import { prisma } from '../utils/prisma';
 import { retrievalService } from '../services/retrieval.service';
 import { aiService } from '../services/ai.service';
 import { citationService } from '../services/citation.service';
+import { agentService } from '../services/agent.service';
 
 /**
  * POST /api/chat
@@ -373,3 +374,30 @@ export const searchDocumentChunks = async (req: Request, res: Response, next: Ne
 };
 
 export const getChatHistory = getConversationsByDocument;
+
+/**
+ * POST /api/chat/agent
+ * Part C Option 2: Autonomous Agentic Document Research with tool-calling
+ */
+export const agentResearch = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { question, message, documentId, maxRounds } = req.body;
+    const query = (question || message || '').trim();
+
+    if (!query) {
+      return res.status(400).json({ success: false, error: 'A question or research query is required.' });
+    }
+
+    const result = await agentService.research(query, {
+      documentId,
+      maxRounds: maxRounds ? Number(maxRounds) : undefined,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -311,3 +311,47 @@ export async function compareContracts(
   }
 }
 
+export interface AgentStep {
+  round: number;
+  thought?: string;
+  toolCall?: {
+    toolName: string;
+    args: any;
+    result?: any;
+    error?: string;
+    isMalformed?: boolean;
+  };
+}
+
+export interface AgentResearchResult {
+  question: string;
+  answer: string;
+  rounds: number;
+  maxRounds: number;
+  steps: AgentStep[];
+  citations: CitationItem[];
+  status: 'completed' | 'max_rounds_reached' | 'failed';
+  evidenceGathered: string[];
+}
+
+export async function runAgentResearch(
+  question: string,
+  documentId?: string,
+  maxRounds?: number
+): Promise<ApiResponse<AgentResearchResult>> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/chat/agent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, documentId, maxRounds }),
+    });
+    return await res.json();
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Failed to execute agentic research',
+    };
+  }
+}
+
+

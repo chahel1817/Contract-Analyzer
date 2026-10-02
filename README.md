@@ -138,6 +138,18 @@ contract-analyzer/
 - **Sub-5% Context Ratio**: Only the top relevant retrieved chunks (< 1% of total document text) are injected into the prompt.
 - **Deep Page Coordinate Resolution**: Verified citations accurately pinpoint quotes located on deep pages (e.g., page 112) with exact character offsets.
 
+### 6. Part C Option 2 — Agentic Document Research
+- **Autonomous Tool-Calling Agent** (`agent.service.ts`):
+  - `search_document(query, documentId)`: Scans document chunks for keywords/topics.
+  - `get_section(sectionTitleOrNumber, documentId)`: Retrieves complete text of a specific section.
+  - `list_clauses(documentId)`: Discovers all clause headings and section numbers in the agreement.
+- **Multi-Round Research Flow**:
+  $$\text{Question} \longrightarrow \text{Agent} \longrightarrow \text{Tool Call} \longrightarrow \text{Tool Result} \longrightarrow \text{Agent} \longrightarrow \text{Final Answer} \longrightarrow \text{Quote Verification}$$
+- **Loop Control & Safety**:
+  - `MAX_ROUNDS`: Prevents infinite loops by capping research rounds (default: 5).
+  - `Malformed Tool-Call Handling`: Gracefully intercepts unparseable JSON, unknown tool names, or missing arguments, returning structured error feedback so the agent can self-correct without crashing.
+- **Verbatim Quote Verification**: Passes synthesized answers through `citationService.verifyQuote()` to ensure citations match source documents with 100% fidelity.
+
 ## Getting Started
 
 ### Prerequisites
@@ -175,4 +187,5 @@ npm run test:highlight    # Citation offset & text layer test
 npm run test:multi-doc    # Multi-document selection & chat test
 npm run test:comparison   # Phase 8: Contract clause comparison test
 npm run test:large-doc    # Phase 9: 100-150 page large document test
+npm run test:agent        # Part C Option 2: Agentic document research test
 ```
