@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Document {
+  id            String          @id @default(uuid())
+  title         String
+  fileName      String
+  fileType      String
+  fileSize      Int
+  filePath      String
+  extractedText String?         @db.Text
+  pageCount     Int?
+  status        String          @default("uploaded") // uploaded, processing, processed, error
+  errorMessage  String?         @db.Text
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  chunks        DocumentChunk[]
+  conversations Conversation[]
+}
+
+model DocumentChunk {
+  id          String     @id @default(uuid())
+  documentId  String
+  document    Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkIndex  Int
+  content     String     @db.Text
+  pageNumber  Int?
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+
+  citations   Citation[]
+}
+
+model Conversation {
+  id          String     @id @default(uuid())
+  documentId  String?
+  document    Document?  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  title       String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  messages    Message[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // "user" | "assistant" | "system"
+  content        String       @db.Text
+  createdAt      DateTime     @default(now())
+
+  citations      Citation[]
+}
+
+model Citation {
+  id          String         @id @default(uuid())
+  messageId   String
+  message     Message        @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  chunkId     String?
+  chunk       DocumentChunk? @relation(fields: [chunkId], references: [id], onDelete: SetNull)
+  quote       String         @db.Text
+  isVerified  Boolean        @default(false)
+  pageNumber  Int?
+  startIndex  Int?
+  endIndex    Int?
+  confidence  Float?
+  createdAt   DateTime       @default(now())
+}
