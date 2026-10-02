@@ -15,6 +15,7 @@ import {
   Calendar,
   FileCheck,
   Loader2,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -243,6 +244,17 @@ export default function DocumentList({
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                  <Link href={`/documents/${doc.id}`}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-slate-800 hover:border-slate-700 bg-slate-900/60 text-slate-300 hover:text-white text-xs h-8 px-2.5 rounded-lg flex items-center gap-1.5"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                      View
+                    </Button>
+                  </Link>
+
                   {isReady && (
                     <Link href={`/chat?docId=${doc.id}`}>
                       <Button
@@ -250,7 +262,7 @@ export default function DocumentList({
                         className="bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs h-8 px-3 rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
-                        Open & Chat
+                        Chat
                       </Button>
                     </Link>
                   )}

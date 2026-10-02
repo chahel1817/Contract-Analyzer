@@ -4,6 +4,7 @@ import {
   getDocuments,
   getDocumentById,
   deleteDocument,
+  getDocumentFile,
 } from '../controllers/document.controller';
 import { handleUpload } from '../middleware/upload.middleware';
 
@@ -14,6 +15,9 @@ router.post('/upload', handleUpload, uploadDocument);
 
 // GET /api/documents - List all documents
 router.get('/', getDocuments);
+
+// GET /api/documents/:id/file - Stream raw PDF or document file
+router.get('/:id/file', getDocumentFile);
 
 // GET /api/documents/:id - Get document details with chunks
 router.get('/:id', getDocumentById);

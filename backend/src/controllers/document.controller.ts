@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import path from 'path';
+import fs from 'fs';
 import { documentService } from '../services/document.service';
 import { extractionService } from '../services/extraction.service';
 import { retrievalService } from '../services/retrieval.service';
@@ -157,6 +159,37 @@ export const deleteDocument = async (req: Request, res: Response, next: NextFunc
       message: 'Document and its associated chunks and history deleted successfully.',
       id,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getDocumentFile = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Document ID is required.' });
+    }
+
+    const document = await documentService.getDocumentById(id);
+    if (!document) {
+      return res.status(404).json({ success: false, error: `Document with ID "${id}" was not found.` });
+    }
+
+    const fullPath = path.isAbsolute(document.filePath)
+      ? document.filePath
+      : path.join(process.cwd(), document.filePath);
+
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, error: 'Physical document file not found on disk.' });
+    }
+
+    const isPdf = document.fileName.toLowerCase().endsWith('.pdf');
+    const contentType = isPdf ? 'application/pdf' : 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${document.fileName}"`);
+    return res.sendFile(fullPath);
   } catch (error) {
     next(error);
   }
