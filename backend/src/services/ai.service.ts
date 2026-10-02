@@ -1,4 +1,4 @@
-import { openai, createOpenAI } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { generateObject, generateText } from 'ai';
 import { z } from 'zod';
 
@@ -32,18 +32,31 @@ const AnswerSchema = z.object({
 });
 
 export class AiService {
-  private isConfigured(): boolean {
-    return Boolean(process.env.OPENAI_API_KEY);
+  public getApiKey(): string {
+    return process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
   }
 
-  private getClient() {
-    const apiKey = process.env.OPENAI_API_KEY;
-    const baseURL = process.env.OPENAI_BASE_URL;
+  public getBaseURL(): string {
+    return process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+  }
 
-    if (baseURL) {
-      return createOpenAI({ apiKey, baseURL });
-    }
-    return openai;
+  public getModel(): string {
+    return process.env.AI_MODEL || process.env.OPENAI_MODEL || 'openrouter/free';
+  }
+
+  public isConfigured(): boolean {
+    return Boolean(this.getApiKey());
+  }
+
+  public getClient() {
+    return createOpenAI({
+      apiKey: this.getApiKey(),
+      baseURL: this.getBaseURL(),
+      headers: {
+        'HTTP-Referer': process.env.CORS_ORIGIN || 'http://localhost:3000',
+        'X-Title': 'Contract Analyzer',
+      },
+    });
   }
 
   /**
@@ -70,12 +83,13 @@ export class AiService {
       .map((c, i) => `--- Excerpt ${i + 1} (Page ${c.pageStart || 1}) ---\n${c.text}`)
       .join('\n\n');
 
-    // 1. If OpenAI API key is configured, use structured LLM generation
+    // 1. If AI API key is configured (OpenRouter, OpenAI, etc.)
     if (this.isConfigured()) {
-      try {
-        const client = this.getClient();
-        const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+      const client = this.getClient();
+      const modelName = this.getModel();
 
+      // Strategy A: Native Structured Outputs via generateObject
+      try {
         const { object } = await generateObject({
           model: client(modelName),
           schema: AnswerSchema,
@@ -83,7 +97,7 @@ export class AiService {
 Your role is to answer questions about legal contracts with 100% fidelity to the provided text.
 
 CRITICAL RULES:
-1. Base your answer EXCLUSIVELY on the provided excerpts below.
+1. Base your answer EXCLUSIVELY on the provided contract excerpts below.
 2. Every factual statement or claim in your answer MUST be supported by one or more exact quotes in the "quotes" array.
 3. Every item in the "quotes" array MUST be an EXACT, literal quote copied word-for-word from the excerpts. Do NOT paraphrase, summarize, or alter words inside quotes.
 4. If the answer cannot be found in the provided excerpts, state: "The provided contract sections do not contain information to answer this question." and return an empty quotes array [].
@@ -98,20 +112,63 @@ ${question}`,
 
         return {
           answer: object.answer,
-          quotes: object.quotes.map((q) => ({ text: q.text.trim() })),
+          quotes: object.quotes.map((q) => ({ text: q.text.trim() })).filter((q) => q.text.length > 0),
         };
-      } catch (error: any) {
-        console.warn('OpenAI structured generation failed, using fallback:', error.message);
-        // Fall back to rule-based extraction below
+      } catch (structuredErr: any) {
+        console.warn('generateObject failed on model', modelName, ':', structuredErr.message);
+        console.log('Falling back to prompt-guided JSON generation (compatible with all open models)...');
+
+        // Strategy B: Prompt-guided JSON generation via generateText
+        try {
+          const { text } = await generateText({
+            model: client(modelName),
+            system: `You are an expert legal contract analyst AI. You MUST output ONLY a valid raw JSON object conforming to this exact structure:
+{
+  "answer": "your direct answer based strictly on the excerpts",
+  "quotes": [
+    { "text": "exact verbatim quote copied directly from text" }
+  ]
+}
+Do not write markdown fences, backticks, or any conversational text outside the JSON. Only output valid JSON.`,
+            prompt: `Context Excerpts:
+${context}
+
+User Question:
+${question}
+
+Remember: quotes must be exact literal excerpts. Output JSON only:`,
+          });
+
+          // Extract JSON from response (handles optional code block wrappers)
+          const cleanedText = text
+            .replace(/```json/gi, '')
+            .replace(/```/g, '')
+            .trim();
+
+          const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed.answer && Array.isArray(parsed.quotes)) {
+              return {
+                answer: parsed.answer,
+                quotes: parsed.quotes.map((q: any) => ({
+                  text: typeof q === 'string' ? q.trim() : (q.text || '').trim(),
+                })).filter((q: { text: string }) => q.text.length > 0),
+              };
+            }
+          }
+        } catch (textErr: any) {
+          console.warn('generateText JSON fallback also failed:', textErr.message);
+        }
       }
     }
 
-    // 2. Deterministic Fallback Mode (Runs without AI or when API key is unconfigured)
+    // 2. Deterministic Fallback Mode (Runs if API key is not set or both LLM attempts fail)
     return this.generateDeterministicFallback(question, chunks);
   }
 
   /**
-   * Deterministic answer generator for evaluation and testing without active OpenAI API keys.
+   * Deterministic answer generator for evaluation and offline testing.
    * Extracts the most relevant sentences as exact verbatim quotes.
    */
   private generateDeterministicFallback(question: string, chunks: ChunkInput[]): GeneratedAnswer {
@@ -125,7 +182,6 @@ ${question}`,
     let bestScore = -1;
 
     for (const chunk of chunks) {
-      // Split into sentences
       const sentences = chunk.text.split(/(?<=[.?!])\s+/);
       for (const rawSentence of sentences) {
         const sentence = rawSentence.trim();
@@ -162,27 +218,20 @@ ${question}`,
   }
 
   /**
-   * Summarizes a contract using AI SDK or structured fallback
+   * Summarizes a contract using configured AI provider or fallback
    */
   async summarizeContract(text: string): Promise<string> {
     if (!this.isConfigured()) {
-      return `Summary of contract (${text.length} characters): Key provisions include confidentiality, liability caps, and termination rights as outlined in the indexed sections.`;
+      return `Summary of contract (${text.length} characters): Key provisions include confidentiality, liability caps, and termination rights.`;
     }
 
     try {
       const client = this.getClient();
-      const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+      const modelName = this.getModel();
 
       const response = await generateText({
         model: client(modelName),
-        prompt: `You are an expert legal contract analyst. Provide a concise executive summary of the following contract, highlighting:
-1. Executive Summary & Purpose
-2. Key Obligations
-3. Financial Terms
-4. Liabilities & Indemnities
-5. Termination Provisions
-
-Contract Text:
+        prompt: `You are an expert legal contract analyst. Provide a concise executive summary of the following contract:
 ${text.slice(0, 25000)}`,
       });
 

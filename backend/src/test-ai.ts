@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { aiService } from './services/ai.service';
 
 async function testAiService() {
