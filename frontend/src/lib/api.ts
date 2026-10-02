@@ -257,11 +257,57 @@ export async function sendChatMessage(documentId: string, message: string) {
   return res.json();
 }
 
-export async function compareContracts(docAId: string, docBId: string) {
-  const res = await fetch(`${API_BASE_URL}/comparison/compare`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ docAId, docBId }),
-  });
-  return res.json();
+export type SignificanceLevel = 'High' | 'Medium' | 'Low';
+export type ChangeType = 'modified' | 'added' | 'removed' | 'unchanged';
+
+export interface ClauseComparison {
+  id: string;
+  clause: string;
+  oldText: string | null;
+  newText: string | null;
+  changeType: ChangeType;
+  summary: string;
+  significance: SignificanceLevel;
 }
+
+export interface ComparisonResult {
+  documentA: { id: string; title: string; fileName: string };
+  documentB: { id: string; title: string; fileName: string };
+  executiveSummary: string;
+  totalChanges: number;
+  counts: {
+    high: number;
+    medium: number;
+    low: number;
+    added: number;
+    removed: number;
+    modified: number;
+  };
+  comparisons: ClauseComparison[];
+  changes?: ClauseComparison[];
+}
+
+export async function compareContracts(
+  docAId: string,
+  docBId: string
+): Promise<ApiResponse<ComparisonResult>> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/comparison`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        documentA: docAId,
+        documentB: docBId,
+        docAId,
+        docBId,
+      }),
+    });
+    return await res.json();
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Failed to compare contracts',
+    };
+  }
+}
+

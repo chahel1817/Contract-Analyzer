@@ -16,6 +16,7 @@ import {
   FileCheck,
   Loader2,
   Eye,
+  GitCompare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -256,15 +257,27 @@ export default function DocumentList({
                   </Link>
 
                   {isReady && (
-                    <Link href={`/chat?docId=${doc.id}`}>
-                      <Button
-                        size="sm"
-                        className="bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs h-8 px-3 rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        Chat
-                      </Button>
-                    </Link>
+                    <>
+                      <Link href={`/chat?docId=${doc.id}`}>
+                        <Button
+                          size="sm"
+                          className="bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs h-8 px-3 rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Chat
+                        </Button>
+                      </Link>
+                      <Link href={`/compare?docA=${doc.id}`}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-slate-800 hover:border-slate-700 bg-slate-900/60 text-slate-300 hover:text-white text-xs h-8 px-2.5 rounded-lg flex items-center gap-1.5"
+                        >
+                          <GitCompare className="w-3.5 h-3.5 text-purple-400" />
+                          Compare
+                        </Button>
+                      </Link>
+                    </>
                   )}
 
                   <Button
