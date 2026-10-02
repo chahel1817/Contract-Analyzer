@@ -1,11 +1,13 @@
 import fs from 'fs/promises';
 import path from 'path';
 import mammoth from 'mammoth';
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 
 export interface ExtractionResult {
   text: string;
-  pageCount?: number;
+  pageCount: number;
+  isScanned: boolean;
+  pages?: { pageNumber: number; text: string }[];
   metadata?: Record<string, any>;
 }
 
@@ -15,31 +17,60 @@ export class ExtractionService {
     const fileBuffer = await fs.readFile(filePath);
 
     if (ext === '.pdf') {
-      const data = await pdfParse(fileBuffer);
+      const parser = new PDFParse(new Uint8Array(fileBuffer));
+      await parser.load();
+      const parsed = await parser.getText();
+      
+      const rawText = parsed.text || '';
+      const totalPages = parsed.total || (parsed.pages && parsed.pages.length) || 1;
+      
+      // Map individual pages
+      const pageList: { pageNumber: number; text: string }[] = [];
+      let combinedWithMarkers = '';
+
+      if (parsed.pages && Array.isArray(parsed.pages)) {
+        for (const p of parsed.pages) {
+          const pageNum = p.num || pageList.length + 1;
+          const pageStr = p.text || '';
+          pageList.push({ pageNumber: pageNum, text: pageStr });
+          combinedWithMarkers += `\n[[PAGE_${pageNum}]]\n${pageStr}`;
+        }
+      } else {
+        combinedWithMarkers = rawText;
+      }
+
+      const cleanText = rawText.replace(/-- \d+ of \d+ --/g, '').replace(/\[\[PAGE_\d+\]\]/g, '').trim();
+      const isScanned = cleanText.length < 15;
+
+      if (parser.destroy) {
+        try { await parser.destroy(); } catch {}
+      }
+
       return {
-        text: data.text || '',
-        pageCount: data.numpages || 1,
-        metadata: {
-          info: data.info,
-          version: data.version,
-        },
+        text: combinedWithMarkers,
+        pageCount: totalPages,
+        isScanned,
+        pages: pageList,
       };
     }
 
-    if (ext === '.docx' || ext === '.doc') {
+    if (ext === '.docx') {
       const result = await mammoth.extractRawText({ buffer: fileBuffer });
+      const text = result.value || '';
+      const isScanned = text.trim().length === 0;
+      const estimatedPages = Math.max(1, Math.ceil(text.length / 2500));
+
       return {
-        text: result.value || '',
+        text,
+        pageCount: estimatedPages,
+        isScanned,
         metadata: {
           messages: result.messages,
         },
       };
     }
 
-    // Default to plain text
-    return {
-      text: fileBuffer.toString('utf-8'),
-    };
+    throw new Error(`Unsupported file type: ${ext}. Only PDF and DOCX files are allowed.`);
   }
 }
 

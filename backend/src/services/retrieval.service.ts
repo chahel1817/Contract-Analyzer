@@ -1,5 +1,4 @@
 import { prisma } from '../utils/prisma';
-import { chunkText } from '../utils';
 
 export interface RetrievedChunk {
   id: string;
@@ -10,22 +9,64 @@ export interface RetrievedChunk {
 }
 
 export class RetrievalService {
-  async indexDocument(documentId: string, fullText: string): Promise<number> {
-    const rawChunks = chunkText(fullText, 1200, 200);
+  chunkDocument(text: string, chunkSize: number = 1000, overlap: number = 150): { content: string; pageNumber: number }[] {
+    const chunks: { content: string; pageNumber: number }[] = [];
 
-    // Delete any old chunks for this document
+    // Check if we have page markers [[PAGE_X]]
+    const pageSplits = text.split(/\[\[PAGE_(\d+)\]\]/);
+
+    if (pageSplits.length > 1) {
+      for (let i = 1; i < pageSplits.length; i += 2) {
+        const pageNum = parseInt(pageSplits[i] || '1', 10);
+        const pageContent = (pageSplits[i + 1] || '').trim();
+        if (!pageContent) continue;
+
+        let start = 0;
+        while (start < pageContent.length) {
+          const end = Math.min(start + chunkSize, pageContent.length);
+          const chunkStr = pageContent.slice(start, end).trim();
+          if (chunkStr.length > 0) {
+            chunks.push({ content: chunkStr, pageNumber: pageNum });
+          }
+          start += chunkSize - overlap;
+          if (start >= pageContent.length || chunkSize <= overlap) break;
+        }
+      }
+    } else {
+      let start = 0;
+      while (start < text.length) {
+        const end = Math.min(start + chunkSize, text.length);
+        const chunkStr = text.slice(start, end).trim();
+        if (chunkStr.length > 0) {
+          const estimatedPage = Math.floor(start / 2500) + 1;
+          chunks.push({ content: chunkStr, pageNumber: estimatedPage });
+        }
+        start += chunkSize - overlap;
+        if (start >= text.length || chunkSize <= overlap) break;
+      }
+    }
+
+    return chunks;
+  }
+
+  async indexDocument(documentId: string, fullText: string): Promise<number> {
+    const chunks = this.chunkDocument(fullText);
+
+    // Remove any previous chunks for document
     await prisma.documentChunk.deleteMany({ where: { documentId } });
 
-    await prisma.documentChunk.createMany({
-      data: rawChunks.map((content, idx) => ({
-        documentId,
-        chunkIndex: idx,
-        content: content.trim(),
-        pageNumber: Math.floor(idx / 3) + 1,
-      })),
-    });
+    if (chunks.length > 0) {
+      await prisma.documentChunk.createMany({
+        data: chunks.map((c, idx) => ({
+          documentId,
+          chunkIndex: idx,
+          content: c.content,
+          pageNumber: c.pageNumber,
+        })),
+      });
+    }
 
-    return rawChunks.length;
+    return chunks.length;
   }
 
   async retrieveRelevantChunks(documentId: string, query: string, limit: number = 5): Promise<RetrievedChunk[]> {
