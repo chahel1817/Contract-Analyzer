@@ -122,19 +122,23 @@ export class ChunkingService {
     });
 
     if (chunks.length > 0) {
-      await prisma.documentChunk.createMany({
-        data: chunks.map((c) => ({
-          documentId: c.documentId,
-          text: c.text,
-          content: c.text, // for backward compatibility
-          chunkIndex: c.chunkIndex,
-          pageStart: c.pageStart,
-          pageEnd: c.pageEnd,
-          charStart: c.charStart,
-          charEnd: c.charEnd,
-          pageNumber: c.pageStart,
-        })),
-      });
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        const batch = chunks.slice(i, i + BATCH_SIZE);
+        await prisma.documentChunk.createMany({
+          data: batch.map((c) => ({
+            documentId: c.documentId,
+            text: c.text,
+            content: c.text, // for backward compatibility
+            chunkIndex: c.chunkIndex,
+            pageStart: c.pageStart,
+            pageEnd: c.pageEnd,
+            charStart: c.charStart,
+            charEnd: c.charEnd,
+            pageNumber: c.pageStart,
+          })),
+        });
+      }
     }
 
     return chunks.length;

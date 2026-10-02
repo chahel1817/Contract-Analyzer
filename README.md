@@ -132,6 +132,12 @@ contract-analyzer/
     }
     ```
 
+### 5. Phase 9 — Large Document Strategy (100–150 Pages)
+- **Large Document Processing**: Handles large 100–150+ page enterprise contracts without memory bottlenecks.
+- **RAG vs Context Bloat**: Avoids sending the entire 150-page document to the LLM (which would cause context overflow, high cost, and hallucination).
+- **Sub-5% Context Ratio**: Only the top relevant retrieved chunks (< 1% of total document text) are injected into the prompt.
+- **Deep Page Coordinate Resolution**: Verified citations accurately pinpoint quotes located on deep pages (e.g., page 112) with exact character offsets.
+
 ## Getting Started
 
 ### Prerequisites
@@ -168,4 +174,5 @@ npm run test:persistence  # Chat persistence test
 npm run test:highlight    # Citation offset & text layer test
 npm run test:multi-doc    # Multi-document selection & chat test
 npm run test:comparison   # Phase 8: Contract clause comparison test
+npm run test:large-doc    # Phase 9: 100-150 page large document test
 ```
