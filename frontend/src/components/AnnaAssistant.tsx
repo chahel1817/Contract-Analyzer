@@ -584,6 +584,23 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
           </div>
         )}
 
+        {/* Error Banner */}
+        {error && (
+          <div className="w-full mb-2 p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between text-xs text-rose-700 animate-in fade-in shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+              <span className="font-medium">{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="text-rose-400 hover:text-rose-700 p-1 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* 3. Bottom Floating Search / Input Pill (Exact replica from image) */}
         <div className="w-full pt-2 pb-5 sm:pb-8 relative shrink-0">
           <form
@@ -620,12 +637,21 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                 className="flex-1 bg-transparent border-0 outline-none text-neutral-900 placeholder:text-neutral-400 text-[15px] sm:text-[16px] font-normal"
               />
 
-              {/* Right Action: Send Button or Microphone Button */}
-              {query.trim().length > 0 ? (
+              {/* Right Action: Stop Button if Generating, Send Button if Text, or Microphone Button */}
+              {isGenerating ? (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  className="ml-2 w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center hover:bg-rose-700 transition active:scale-95 cursor-pointer shadow-xs"
+                  aria-label="Stop generating"
+                  title="Stop generating"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                </button>
+              ) : query.trim().length > 0 ? (
                 <button
                   type="submit"
-                  disabled={isGenerating}
-                  className="ml-2 w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center hover:bg-black transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                  className="ml-2 w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center hover:bg-black transition active:scale-95 cursor-pointer"
                   aria-label="Submit search"
                 >
                   <Send className="w-3.5 h-3.5" />

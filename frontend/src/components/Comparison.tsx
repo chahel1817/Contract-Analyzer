@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   Columns,
   SquareSplitHorizontal,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -306,6 +307,38 @@ export default function Comparison({ initialDocAId, initialDocBId }: ComparisonP
           </div>
         )}
       </div>
+
+      {/* Processing State during comparison */}
+      {isComparing && (
+        <div className="p-12 text-center bg-white border border-neutral-200/90 rounded-3xl shadow-xs space-y-4 animate-in fade-in">
+          <div className="w-16 h-16 rounded-3xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600 shadow-2xs">
+            <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-neutral-900">Comparing Contract Versions</h3>
+            <p className="text-xs text-neutral-500 max-w-sm mx-auto leading-relaxed">
+              Extracting legal clauses, aligning corresponding provisions, and evaluating liability risk shifts...
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+            <span className="text-xs text-amber-700 font-semibold">Semantic Clause Diffing & LLM Analysis</span>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State before comparison */}
+      {!comparisonResult && !isComparing && (
+        <div className="p-12 text-center bg-white border border-neutral-200/90 rounded-3xl shadow-xs space-y-3 animate-in fade-in">
+          <div className="w-16 h-16 rounded-3xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600 shadow-2xs">
+            <GitCompare className="w-8 h-8" />
+          </div>
+          <h3 className="text-base font-bold text-neutral-900">Select Two Contracts to Compare</h3>
+          <p className="text-xs text-neutral-500 max-w-md mx-auto leading-relaxed">
+            Choose a baseline version (Version 1) and a revised agreement (Version 2) to perform deep substantive clause-by-clause diffing, risk significance scoring, and executive change analysis.
+          </p>
+        </div>
+      )}
 
       {/* Comparison Results */}
       {comparisonResult && (
