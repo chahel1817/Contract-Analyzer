@@ -13,6 +13,7 @@
     "studio": "prisma studio",
     "test:db": "ts-node-dev --transpile-only src/test-db.ts",
     "test:retrieval": "ts-node-dev --transpile-only src/test-retrieval.ts",
+    "test:ai": "ts-node-dev --transpile-only src/test-ai.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
