@@ -20,8 +20,8 @@ export const compareDocuments = async (req: Request, res: Response) => {
     }
 
     const [docA, docB] = await Promise.all([
-      prisma.document.findUnique({ where: { id: docAId } }),
-      prisma.document.findUnique({ where: { id: docBId } }),
+      prisma.document.findUnique({ where: { id: docAId }, include: { chunks: true } }),
+      prisma.document.findUnique({ where: { id: docBId }, include: { chunks: true } }),
     ]);
 
     if (!docA) {
@@ -41,20 +41,12 @@ export const compareDocuments = async (req: Request, res: Response) => {
     // Retrieve full text, falling back to chunks if extractedText is empty
     let textA = docA.extractedText || '';
     if (!textA.trim()) {
-      const chunksA = await prisma.documentChunk.findMany({
-        where: { documentId: docA.id },
-        orderBy: { chunkIndex: 'asc' },
-      });
-      textA = chunksA.map((c) => c.text).join('\n\n');
+      textA = (docA.chunks || []).map((c) => c.text).join('\n\n');
     }
 
     let textB = docB.extractedText || '';
     if (!textB.trim()) {
-      const chunksB = await prisma.documentChunk.findMany({
-        where: { documentId: docB.id },
-        orderBy: { chunkIndex: 'asc' },
-      });
-      textB = chunksB.map((c) => c.text).join('\n\n');
+      textB = (docB.chunks || []).map((c) => c.text).join('\n\n');
     }
 
     if (!textA.trim() || !textB.trim()) {
@@ -70,17 +62,19 @@ export const compareDocuments = async (req: Request, res: Response) => {
         title: docA.title,
         fileName: docA.fileName,
         text: textA,
+        chunks: docA.chunks,
       },
       {
         id: docB.id,
         title: docB.title,
         fileName: docB.fileName,
         text: textB,
+        chunks: docB.chunks,
       }
     );
 
-    // Structure the response to satisfy requirement 21 & 22
-    // Output: clause, oldText, newText, summary, significance
+    // Structure the response to satisfy requirements with verified citations
+    // Output: clause, oldText, newText, summary, significance, oldCitation, newCitation
     return res.status(200).json({
       success: true,
       data: comparisonResult,
@@ -95,6 +89,8 @@ export const compareDocuments = async (req: Request, res: Response) => {
         summary: c.summary,
         significance: c.significance,
         changeType: c.changeType,
+        oldCitation: c.oldCitation,
+        newCitation: c.newCitation,
       })),
     });
   } catch (error: any) {

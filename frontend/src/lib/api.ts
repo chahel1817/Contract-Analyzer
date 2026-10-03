@@ -260,6 +260,16 @@ export async function sendChatMessage(documentId: string, message: string) {
 export type SignificanceLevel = 'High' | 'Medium' | 'Low';
 export type ChangeType = 'modified' | 'added' | 'removed' | 'unchanged';
 
+export interface ClauseCitation {
+  quote: string;
+  page?: number | null;
+  pageStart?: number | null;
+  pageEnd?: number | null;
+  startOffset?: number | null;
+  endOffset?: number | null;
+  verified: boolean;
+}
+
 export interface ClauseComparison {
   id: string;
   clause: string;
@@ -268,6 +278,8 @@ export interface ClauseComparison {
   changeType: ChangeType;
   summary: string;
   significance: SignificanceLevel;
+  oldCitation?: ClauseCitation | null;
+  newCitation?: ClauseCitation | null;
 }
 
 export interface ComparisonResult {

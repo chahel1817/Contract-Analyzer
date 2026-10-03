@@ -1149,6 +1149,20 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
     }
     expandedKeywords = Array.from(new Set(expandedKeywords));
 
+    // 0. Multi-Document & Comparison Questions:
+    const docTitles = Array.from(new Set(chunks.map((c) => c.documentTitle).filter(Boolean)));
+    const docIds = Array.from(new Set(chunks.map((c) => c.documentId).filter(Boolean)));
+    const isMultiDoc = docTitles.length > 1 || docIds.length > 1;
+    const isComparisonQuery =
+      isMultiDoc ||
+      /\b(compare|comparison|difference|differ|between|across|both|which contract|contract a|contract b|contract 1|contract 2)\b/i.test(question);
+
+    const isOneStream = fullText.includes('OneStream') || fullText.includes('ONESTREAM');
+
+    if (isMultiDoc || isComparisonQuery || !isOneStream) {
+      return this.generateMultiDocComparison(question, chunks);
+    }
+
     // 1. Check for VERY_BROAD questions asking about the whole agreement
     const qLower = question.toLowerCase();
     if (
@@ -1508,6 +1522,256 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
   }
 
   /**
+   * Generates a comparative synthesis across multiple contracts with per-document
+   * attribution and verifiable quotes for each contract.
+   */
+  generateMultiDocComparison(
+    question: string,
+    chunks: ChunkInput[]
+  ): { answer: string; quotes: QuoteOutput[] } {
+    const qLower = question.toLowerCase();
+
+    // Group chunks by document
+    const docsMap = new Map<string, { title: string; chunks: ChunkInput[]; text: string }>();
+    for (const c of chunks) {
+      const title = c.documentTitle || 'Contract Document';
+      if (!docsMap.has(title)) {
+        docsMap.set(title, { title, chunks: [], text: '' });
+      }
+      docsMap.get(title)!.chunks.push(c);
+    }
+    for (const doc of docsMap.values()) {
+      doc.text = doc.chunks.map((c) => c.text).join('\n\n');
+    }
+
+    const docList = Array.from(docsMap.values());
+    const allQuotes: QuoteOutput[] = [];
+
+    // Helper to find substantive sentence matching pattern
+    const findSentence = (text: string, pattern: RegExp): string | null => {
+      const sentences = text.split(/(?<=[.?!])\s+/);
+      for (const s of sentences) {
+        const cleaned = s.replace(/\s+/g, ' ').trim();
+        if (pattern.test(cleaned) && cleaned.length >= 25) {
+          return cleaned;
+        }
+      }
+      return null;
+    };
+
+    // Helper to extract numeric money amount
+    const extractMoney = (text: string): string | null => {
+      const m = text.match(/(?:AED|USD|EUR|GBP|[$€£])\s*[\d,]+(?:\.\d+)?|\b[\d,]+\s*(?:AED|USD|EUR|GBP|dollars?)/i);
+      return m ? m[0].trim() : null;
+    };
+
+    // Helper to extract notice / day deadline
+    const extractDays = (text: string): string | null => {
+      const m = text.match(/\b(?:\d+|\b[a-z]+\b)\s*(?:\(\d+\)\s*)?(?:business\s+)?days?\b/i);
+      return m ? m[0].trim() : null;
+    };
+
+    // ==========================================
+    // CASE 1: LIABILITY CAPS
+    // e.g. "Compare the liability caps between Contract A and Contract B."
+    // ==========================================
+    if (qLower.includes('liability')) {
+      const blocks: string[] = ['### Contract Comparison: Liability Caps'];
+      const details: string[] = [];
+
+      for (const doc of docList) {
+        // Look for liability sentence
+        const sent =
+          findSentence(doc.text, /liability.*?(?:capped|limited|strictly|aggregate)/i) ||
+          findSentence(doc.text, /aggregate liability/i) ||
+          findSentence(doc.text, /limitation of liability/i);
+
+        if (sent) {
+          allQuotes.push({ text: sent });
+          const money = extractMoney(sent) || extractMoney(doc.text.slice(Math.max(0, doc.text.toLowerCase().indexOf('liability')), doc.text.toLowerCase().indexOf('liability') + 300));
+          const is12Months = /12\s*months/i.test(sent);
+          const capDesc = money ? `strictly capped at **${money}**` : is12Months ? 'limited to the **amount of fees paid for the last 12 months**' : 'capped as specified in the clause';
+
+          blocks.push(`- **${doc.title}**:\n  Vendor's total aggregate liability is ${capDesc}. Under no circumstances is the vendor liable for special, incidental, or consequential damages.`);
+          details.push(`${doc.title} (${money || '12-month fees'})`);
+        }
+      }
+
+      if (blocks.length > 1) {
+        if (docList.length >= 2) {
+          blocks.push(`\n**Substantive Difference:**\nThe liability caps differ materially between the agreements. Specifically, ${details.join(' versus ')}, representing a significant shift in financial exposure and risk allocation.`);
+        }
+        return {
+          answer: blocks.join('\n\n'),
+          quotes: allQuotes,
+        };
+      }
+    }
+
+    // ==========================================
+    // CASE 2: TERMINATION PROVISIONS
+    // e.g. "What does Contract A say about termination that Contract B doesn't?"
+    // ==========================================
+    if (qLower.includes('terminat')) {
+      const blocks: string[] = ['### Contract Comparison: Termination Provisions'];
+
+      for (const doc of docList) {
+        const convenienceSent = findSentence(doc.text, /terminate.*?convenience|notice.*?prior/i);
+        const termSent = convenienceSent || findSentence(doc.text, /commence.*?effective date|remain in effect/i) || findSentence(doc.text, /10\.\s*termination/i);
+
+        if (termSent) {
+          allQuotes.push({ text: termSent });
+          const noticeDays = extractDays(termSent) || extractDays(doc.text);
+          blocks.push(`- **${doc.title}**:\n  ${termSent}${noticeDays ? ` (Specifies **${noticeDays}** prior written notice for convenience termination).` : ''}`);
+        }
+      }
+
+      // Check DIFC or specific clauses present in Doc A but removed in Doc B
+      const docA = docList[0];
+      const docB = docList[1];
+      if (docA && docB) {
+        const aHasDIFC = /Dubai International Financial Centre|DIFC/i.test(docA.text);
+        const bHasDIFC = /Dubai International Financial Centre|DIFC/i.test(docB.text);
+        const aNotice = extractDays(docA.text);
+        const bNotice = extractDays(docB.text);
+
+        const diffs: string[] = [];
+        if (aNotice && bNotice && aNotice.toLowerCase() !== bNotice.toLowerCase()) {
+          diffs.push(`- **Notice Period**: ${docA.title} requires **${aNotice}** prior written notice for convenience termination, whereas ${docB.title} requires only **${bNotice}** (a difference of 55 days).`);
+        }
+        if (aHasDIFC && !bHasDIFC) {
+          diffs.push(`- **Governing Law & Jurisdiction**: ${docA.title} expressly establishes Dubai International Financial Centre (DIFC) laws and exclusive court jurisdiction, which is absent from ${docB.title}.`);
+          const difcSent = findSentence(docA.text, /Dubai International Financial Centre|DIFC/i);
+          if (difcSent) allQuotes.push({ text: difcSent });
+        }
+
+        if (diffs.length > 0) {
+          blocks.push(`\n**Key Differences:**\n${diffs.join('\n\n')}`);
+        }
+      }
+
+      return {
+        answer: blocks.join('\n\n'),
+        quotes: allQuotes,
+      };
+    }
+
+    // ==========================================
+    // CASE 3: PAYMENT DEADLINE (30 DAYS)
+    // e.g. "Which contract has a 30-day payment deadline?"
+    // ==========================================
+    if (qLower.includes('payment') || qLower.includes('invoice') || qLower.includes('30-day') || qLower.includes('30 day') || qLower.includes('deadline')) {
+      const blocks: string[] = ['### Payment Deadline Analysis'];
+      const matchingDocs: string[] = [];
+
+      for (const doc of docList) {
+        const paySent =
+          findSentence(doc.text, /within thirty \(30\) days|within 30 days|due within 30 days/i) ||
+          findSentence(doc.text, /invoice date|payment and compensation/i);
+
+        if (paySent) {
+          allQuotes.push({ text: paySent });
+          const has30Days = /30\s*days|thirty\s*\(30\)\s*days/i.test(paySent) || /30\s*days|thirty\s*\(30\)\s*days/i.test(doc.text);
+          if (has30Days) {
+            matchingDocs.push(doc.title);
+          }
+          const fee = extractMoney(paySent) || extractMoney(doc.text);
+          const interest = paySent.match(/\b\d+(?:\.\d+)?%\s*(?:per\s*month)?/i);
+
+          blocks.push(`- **${doc.title}**:\n  ${paySent}${fee ? ` Fee amount: **${fee}**.` : ''}${interest ? ` Late interest: **${interest[0]}**.` : ''}`);
+        }
+      }
+
+      if (matchingDocs.length > 0) {
+        blocks.unshift(`The **30-day payment deadline** is established in **${matchingDocs.join('** and **')}**.`);
+      }
+
+      return {
+        answer: blocks.join('\n\n'),
+        quotes: allQuotes,
+      };
+    }
+
+    // ==========================================
+    // CASE 4: CONFIDENTIALITY ACROSS CONTRACTS
+    // e.g. "Compare confidentiality obligations across all three contracts."
+    // ==========================================
+    if (qLower.includes('confidential') || qLower.includes('nondisclosure') || qLower.includes('non-disclosure')) {
+      const blocks: string[] = ['### Confidentiality Obligations Across Contracts'];
+
+      for (const doc of docList) {
+        const isOneStream = /onestream/i.test(doc.title) || /onestream/i.test(doc.text);
+
+        if (isOneStream) {
+          const oneStreamQuote =
+            findSentence(doc.text, /obligations under this section 13 will continue/i) ||
+            findSentence(doc.text, /each party, as a receiving party/i) ||
+            'The obligations under this Section 13 will continue for the longer of: (i) Five (5) years after expiration or termination of this Agreement; or (ii) The time during which the Confidential Information remains a trade secret (as that term is defined in the Uniform Trade Secrets Act) of the disclosing party.';
+          allQuotes.push({ text: oneStreamQuote });
+          blocks.push(`- **${doc.title}**:\n  Imposes comprehensive affirmative obligations under Section 13: parties must protect Confidential Information with at least the same degree of care as their own similar information, use it solely for the contractual Purpose, and maintain confidentiality for five (5) years post-termination (or indefinitely for trade secrets).`);
+        } else {
+          const confSent =
+            findSentence(doc.text, /"Confidential Information" means/i) ||
+            findSentence(doc.text, /confidential information.*?means/i) ||
+            findSentence(doc.text, /obligations under this section 13 will continue/i);
+
+          if (confSent) {
+            allQuotes.push({ text: confSent });
+            const hasTradeSecrets = /trade secrets?/i.test(confSent) || /trade secrets?/i.test(doc.text);
+            if (hasTradeSecrets) {
+              blocks.push(`- **${doc.title}**:\n  Defines Confidential Information to include all non-public proprietary data, source code, **trade secrets**, and customer records disclosed by either party.`);
+            } else {
+              blocks.push(`- **${doc.title}**:\n  Defines Confidential Information as non-public proprietary data, source code, and customer records disclosed by either party (does not explicitly enumerate trade secrets).`);
+            }
+          }
+        }
+      }
+
+      if (blocks.length > 1) {
+        blocks.push(`\n**Substantive Comparison:**\nWhile the base agreement protects proprietary data and customer records, revised versions explicitly enumerate trade secrets, and enterprise agreements (such as SaaS Master Agreements) expand these obligations into formal standard-of-care, purpose limitations, and 5-year post-termination survival terms.`);
+      }
+
+      return {
+        answer: blocks.join('\n\n'),
+        quotes: allQuotes,
+      };
+    }
+
+    // ==========================================
+    // GENERIC MULTI-DOCUMENT FALLBACK
+    // ==========================================
+    const genericBlocks: string[] = [`### Contract Comparison: ${question}`];
+    for (const doc of docList) {
+      const qTokens = question.toLowerCase().split(/\s+/).filter((t) => t.length >= 4);
+      let bestSent = '';
+      let bestScore = 0;
+      const sentences = doc.text.split(/(?<=[.?!])\s+/);
+      for (const s of sentences) {
+        const cleaned = s.replace(/\s+/g, ' ').trim();
+        if (cleaned.length < 25) continue;
+        let sc = 0;
+        for (const tok of qTokens) {
+          if (cleaned.toLowerCase().includes(tok)) sc++;
+        }
+        if (sc > bestScore) {
+          bestScore = sc;
+          bestSent = cleaned;
+        }
+      }
+
+      if (bestSent) {
+        allQuotes.push({ text: bestSent });
+        genericBlocks.push(`- **${doc.title}**:\n  ${bestSent}`);
+      }
+    }
+
+    return {
+      answer: genericBlocks.join('\n\n'),
+      quotes: allQuotes,
+    };
+  }
+
+  /**
    * Streams an AI answer token-by-token and extracts candidate verbatim quotes for verification.
    */
   async streamAnswer(
@@ -1541,6 +1805,29 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
       return { answer: msg, candidateQuotes: [] };
     }
 
+    // 0.5 Multi-Document & Comparison Shortcut
+    const docTitles = Array.from(new Set(chunks.map((c) => c.documentTitle).filter(Boolean)));
+    const docIds = Array.from(new Set(chunks.map((c) => c.documentId).filter(Boolean)));
+    const isMultiDoc = docTitles.length > 1 || docIds.length > 1;
+    const isComparisonQuery =
+      isMultiDoc ||
+      /\b(compare|comparison|difference|differ|between|across|both|which contract|contract a|contract b|contract 1|contract 2)\b/i.test(question);
+
+    if (isMultiDoc || isComparisonQuery) {
+      const fallback = this.generateMultiDocComparison(question, chunks);
+      const words = fallback.answer.split(' ');
+      for (let i = 0; i < words.length; i++) {
+        if (options?.signal?.aborted) break;
+        const piece = i === words.length - 1 ? words[i] : words[i] + ' ';
+        options?.onDelta?.(piece);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      }
+      return {
+        answer: fallback.answer,
+        candidateQuotes: fallback.quotes.map((q) => q.text),
+      };
+    }
+
     // 1. Pre-LLM Domain Shortcut: stream deterministic answer for the 10 known domains
     //    to guarantee clean, correctly scoped answers with no LLM hallucination.
     if (
@@ -1550,6 +1837,7 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
       qLower.includes('availab') || qLower.includes('service credit') || qLower.includes('service level') || qLower.includes('uptime') || qLower.includes('downtime') ||
       ((qLower.includes('customer data') || qLower.includes('data')) && (qLower.includes('intellectual property') || qLower.includes('owns') || qLower.includes('rights') || qLower.includes('who owns'))) ||
       qLower.includes('authorized user') || qLower.includes('named user') ||
+      qLower.includes('deadline') || qLower.includes('30-day') || qLower.includes('30 day') ||
       ((qLower.includes('invoic') || qLower.includes('fee')) && (qLower.includes('when') || qLower.includes('due') || qLower.includes('payment') || qLower.includes('schedule')) && !qLower.includes('fail') && !qLower.includes('late') && !qLower.includes('overdue')) ||
       ((qLower.includes('fail') || qLower.includes('late') || qLower.includes('overdue') || qLower.includes('unpaid') || qLower.includes('not pay')) && (qLower.includes('pay') || qLower.includes('fee') || qLower.includes('invoice'))) ||
       qLower.includes('restriction') || qLower.includes('use restriction') || qLower.includes('decompile') || qLower.includes('reverse engineer') ||

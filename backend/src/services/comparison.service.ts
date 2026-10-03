@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma';
 import { aiService } from './ai.service';
+import { citationService } from './citation.service';
 import { generateText } from 'ai';
 
 export type SignificanceLevel = 'High' | 'Medium' | 'Low';
@@ -11,6 +12,16 @@ export interface ExtractedClause {
   text: string;
 }
 
+export interface ClauseCitation {
+  quote: string;
+  page?: number | null;
+  pageStart?: number | null;
+  pageEnd?: number | null;
+  startOffset?: number | null;
+  endOffset?: number | null;
+  verified: boolean;
+}
+
 export interface ClauseComparison {
   id: string;
   clause: string;
@@ -19,6 +30,8 @@ export interface ClauseComparison {
   changeType: ChangeType;
   summary: string;
   significance: SignificanceLevel;
+  oldCitation?: ClauseCitation | null;
+  newCitation?: ClauseCitation | null;
 }
 
 export interface ComparisonResult {
@@ -174,11 +187,72 @@ export class ComparisonService {
   }
 
   /**
+   * Independently verifies and locates a substantive quote for a clause against the source document.
+   */
+  extractClauseCitation(
+    clauseText: string | null,
+    fullDocText: string,
+    chunks?: Array<{ text?: string; content?: string | null; pageStart?: number | null; pageEnd?: number | null; pageNumber?: number | null }>
+  ): ClauseCitation | null {
+    if (!clauseText || !clauseText.trim()) return null;
+
+    // Clean leading clause headings (e.g., "4. LIMITATION OF LIABILITY\n")
+    const body = clauseText
+      .replace(/^(?:(?:\d+\.|\([a-z\d]+\))\s*[A-Z\s]{3,50}\n+|[A-Z\s]{4,50}:?\n+)/i, '')
+      .trim();
+    const candidateText = body || clauseText.trim();
+
+    // Split into sentences
+    const sentences = candidateText
+      .split(/(?<=[.?!])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 20);
+
+    // Prefer sentence containing financial terms, percentages, or time deadlines if present
+    const distinctiveSentence = sentences.find((s) =>
+      /(?:AED|USD|EUR|GBP|[$€£]|\b\d+%\b|\b\d+\s*days?\b|\bliabilit|\bterminat|\bfee\b|\bwarrant|\bgovern|\bprotect)/i.test(s)
+    );
+
+    const candidateQuote = (distinctiveSentence || sentences[0] || candidateText.slice(0, 200)).trim();
+
+    const loc = citationService.findQuote(candidateQuote, fullDocText);
+
+    let matchedChunk: any = null;
+    if (chunks && chunks.length > 0) {
+      for (const ch of chunks) {
+        const cText = ch.text || ch.content || '';
+        if (
+          cText.includes(candidateQuote) ||
+          (loc.found && loc.exactQuote && cText.includes(loc.exactQuote))
+        ) {
+          matchedChunk = ch;
+          break;
+        }
+      }
+    }
+
+    const page =
+      (matchedChunk && (matchedChunk.pageStart || matchedChunk.pageNumber)) ||
+      loc.pageStart ||
+      1;
+
+    return {
+      quote: loc.found && loc.exactQuote ? loc.exactQuote : candidateQuote,
+      page: loc.found ? page : null,
+      pageStart: loc.found ? page : null,
+      pageEnd: (matchedChunk && matchedChunk.pageEnd) || loc.pageEnd || page,
+      startOffset: loc.found ? loc.startOffset : null,
+      endOffset: loc.found ? loc.endOffset : null,
+      verified: loc.found,
+    };
+  }
+
+  /**
    * Compares two contract documents and produces substantive clause-level differences.
    */
   async compare(
-    docA: { id: string; title: string; fileName: string; text: string },
-    docB: { id: string; title: string; fileName: string; text: string }
+    docA: { id: string; title: string; fileName: string; text: string; chunks?: any[] },
+    docB: { id: string; title: string; fileName: string; text: string; chunks?: any[] }
   ): Promise<ComparisonResult> {
     const clausesA = this.extractClauses(docA.text);
     const clausesB = this.extractClauses(docB.text);
@@ -200,6 +274,7 @@ export class ComparisonService {
       if (pair.clauseA && !pair.clauseB) {
         // Clause was removed
         const sig: SignificanceLevel = this.detectSignificance(pair.clauseA.text, '', 'removed');
+        const oldCitation = this.extractClauseCitation(pair.clauseA.text, docA.text, docA.chunks);
         comparisons.push({
           id,
           clause: pair.title,
@@ -208,6 +283,8 @@ export class ComparisonService {
           changeType: 'removed',
           summary: `Clause "${pair.title}" present in ${docA.title} was completely removed in ${docB.title}.`,
           significance: sig,
+          oldCitation,
+          newCitation: null,
         });
         countRemoved++;
         if (sig === 'High') countHigh++;
@@ -216,6 +293,7 @@ export class ComparisonService {
       } else if (!pair.clauseA && pair.clauseB) {
         // Clause was added
         const sig: SignificanceLevel = this.detectSignificance('', pair.clauseB.text, 'added');
+        const newCitation = this.extractClauseCitation(pair.clauseB.text, docB.text, docB.chunks);
         comparisons.push({
           id,
           clause: pair.title,
@@ -224,6 +302,8 @@ export class ComparisonService {
           changeType: 'added',
           summary: `New clause "${pair.title}" was introduced in ${docB.title}.`,
           significance: sig,
+          oldCitation: null,
+          newCitation,
         });
         countAdded++;
         if (sig === 'High') countHigh++;
@@ -235,6 +315,8 @@ export class ComparisonService {
         const textB = pair.clauseB.text;
 
         const isUnchanged = this.normalizeText(textA) === this.normalizeText(textB);
+        const oldCitation = this.extractClauseCitation(textA, docA.text, docA.chunks);
+        const newCitation = this.extractClauseCitation(textB, docB.text, docB.chunks);
 
         if (isUnchanged) {
           // Unchanged clause
@@ -246,6 +328,8 @@ export class ComparisonService {
             changeType: 'unchanged',
             summary: 'No substantive changes. Provisions are identical.',
             significance: 'Low',
+            oldCitation,
+            newCitation,
           });
         } else {
           // Modified clause
@@ -260,6 +344,8 @@ export class ComparisonService {
             changeType: 'modified',
             summary: diffSummary.summary,
             significance: sig,
+            oldCitation,
+            newCitation,
           });
 
           countModified++;

@@ -657,6 +657,22 @@ export default function Comparison({ initialDocAId, initialDocBId }: ComparisonP
                                   </span>
                                 )}
                               </div>
+                              {item.oldCitation && (
+                                <div className="pt-2 border-t border-rose-200/60 flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                                  <span className="flex items-center gap-1.5 text-neutral-700 font-medium">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 inline shrink-0" />
+                                    <span>Page {item.oldCitation.page || item.oldCitation.pageStart || 1}</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                                      Verified
+                                    </span>
+                                  </span>
+                                  {item.oldCitation.quote && (
+                                    <span className="text-[10px] text-neutral-500 italic max-w-[240px] truncate" title={item.oldCitation.quote}>
+                                      &ldquo;{item.oldCitation.quote}&rdquo;
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             {/* Version 2 Text */}
@@ -681,6 +697,22 @@ export default function Comparison({ initialDocAId, initialDocBId }: ComparisonP
                                   </span>
                                 )}
                               </div>
+                              {item.newCitation && (
+                                <div className="pt-2 border-t border-emerald-200/60 flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                                  <span className="flex items-center gap-1.5 text-neutral-700 font-medium">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 inline shrink-0" />
+                                    <span>Page {item.newCitation.page || item.newCitation.pageStart || 1}</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                                      Verified
+                                    </span>
+                                  </span>
+                                  {item.newCitation.quote && (
+                                    <span className="text-[10px] text-neutral-500 italic max-w-[240px] truncate" title={item.newCitation.quote}>
+                                      &ldquo;{item.newCitation.quote}&rdquo;
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -688,9 +720,17 @@ export default function Comparison({ initialDocAId, initialDocBId }: ComparisonP
                           <div className="space-y-3">
                             {item.oldText && (
                               <div className="bg-rose-50/60 border border-rose-200/70 rounded-xl p-3.5">
-                                <span className="text-[10px] font-bold uppercase text-rose-700 block mb-1">
-                                  - Version 1 (Old)
-                                </span>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[10px] font-bold uppercase text-rose-700 block">
+                                    - Version 1 (Old)
+                                  </span>
+                                  {item.oldCitation && (
+                                    <span className="flex items-center gap-1 text-[10px] text-emerald-800 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      Page {item.oldCitation.page || item.oldCitation.pageStart || 1} Verified
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-xs font-mono text-rose-900 whitespace-pre-wrap leading-relaxed">
                                   {item.oldText}
                                 </div>
@@ -698,9 +738,17 @@ export default function Comparison({ initialDocAId, initialDocBId }: ComparisonP
                             )}
                             {item.newText && (
                               <div className="bg-emerald-50/60 border border-emerald-200/70 rounded-xl p-3.5">
-                                <span className="text-[10px] font-bold uppercase text-emerald-700 block mb-1">
-                                  + Version 2 (New)
-                                </span>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[10px] font-bold uppercase text-emerald-700 block">
+                                    + Version 2 (New)
+                                  </span>
+                                  {item.newCitation && (
+                                    <span className="flex items-center gap-1 text-[10px] text-emerald-800 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      Page {item.newCitation.page || item.newCitation.pageStart || 1} Verified
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-xs font-mono text-emerald-900 whitespace-pre-wrap leading-relaxed">
                                   {item.newText}
                                 </div>

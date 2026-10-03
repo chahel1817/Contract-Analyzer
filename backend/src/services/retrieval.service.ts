@@ -313,6 +313,16 @@ export class RetrievalService {
   classifyQuery(query: string): QueryClassification {
     const q = query.trim().toLowerCase();
 
+    // Cross-document and comparison queries should not be pinned to a single contract's section number
+    const isComparison = /\b(compare|comparison|difference|differ|between|across|both|which contract|contract a|contract b|contract 1|contract 2)\b/i.test(q);
+    if (isComparison) {
+      if (q.includes('liability')) return { type: 'SPECIFIC', topic: 'liability' };
+      if (q.includes('terminat')) return { type: 'SPECIFIC', topic: 'termination' };
+      if (q.includes('confidential') || q.includes('nondisclosure')) return { type: 'SPECIFIC', topic: 'confidentiality' };
+      if (q.includes('payment') || q.includes('invoice') || q.includes('30-day') || q.includes('30 day')) return { type: 'SPECIFIC', topic: 'payment' };
+      return { type: 'SPECIFIC', topic: 'comparison' };
+    }
+
     // Direct high-confidence topic classifications for core contractual subjects
     if (q.includes('availab') || q.includes('service credit') || q.includes('service level') || q.includes('uptime') || q.includes('downtime')) {
       return {

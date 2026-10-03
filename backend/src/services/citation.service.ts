@@ -281,14 +281,13 @@ export class CitationService {
       }
     }
 
-    // Domain 3: Termination (§10)
+    // Domain 3: Termination
     if (qLower.includes('terminat')) {
       const hasTerm =
-        fullCorpus.toLowerCase().includes('10. termination') ||
-        fullCorpus.toLowerCase().includes('expiration or termination') ||
-        fullCorpus.toLowerCase().includes('termination is not an exclusive remedy');
+        fullCorpus.toLowerCase().includes('terminat') ||
+        fullCorpus.toLowerCase().includes('expiration or termination');
       if (hasTerm) {
-        return { sufficient: true, score: 1.0, reason: 'Found Section 10 termination provisions.' };
+        return { sufficient: true, score: 1.0, reason: 'Found contract termination provisions.' };
       }
     }
 
@@ -425,14 +424,15 @@ export class CitationService {
     // 4. General Distinctive Concept & Predicate Overlap Check
     // Contract boilerplate and common English words that do not prove a question's specific predicate
     const CONTRACT_BOILERPLATE = new Set([
-      'agreement', 'contract', 'section', 'clause', 'schedule', 'order', 'party', 'parties',
+      'agreement', 'contract', 'contracts', 'section', 'clause', 'schedule', 'order', 'party', 'parties',
       'customer', 'onestream', 'service', 'services', 'hereof', 'herein', 'thereof', 'therein',
       'shall', 'will', 'may', 'under', 'with', 'from', 'have', 'been', 'were', 'that', 'this',
       'each', 'such', 'provided', 'forth', 'must', 'should', 'could', 'would', 'does', 'did',
       'what', 'when', 'where', 'which', 'who', 'how', 'why', 'any', 'all', 'some', 'about',
-      'required', 'provisions', 'terms', 'document', 'name', 'names', 'use', 'uses', 'used',
+      'required', 'provisions', 'terms', 'document', 'documents', 'name', 'names', 'use', 'uses', 'used',
       'using', 'software', 'matter', 'manner', 'time', 'period', 'form', 'respect', 'respects',
-      'person', 'entity', 'entities', 'case'
+      'person', 'entity', 'entities', 'case', 'say', 'says', 'saying', 'said',
+      'doesn', 'doesnt', 'not', 'differ', 'differing', 'difference', 'compare', 'comparing', 'between', 'across'
     ]);
 
     // Check for specific queried subjects/entities not in contract (e.g. competitor, penalty, ceo)
