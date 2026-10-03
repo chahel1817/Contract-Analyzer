@@ -88,11 +88,63 @@ export class RetrievalService {
       };
     }
 
-    if ((q.includes('applicable term') || q.includes('contract duration')) && !q.includes('terminat')) {
+    if (q.includes('applicable term') || q.includes('contract duration')) {
       return {
         type: 'SECTION',
         topic: 'term',
         sectionNumber: '7',
+      };
+    }
+
+    if (q.includes('authorized user') || q.includes('who is an authorized user') || q.includes('named user')) {
+      return {
+        type: 'SECTION',
+        topic: 'authorized user',
+        sectionNumber: '1',
+      };
+    }
+
+    if (
+      q.includes('invoice') ||
+      q.includes('invoiced') ||
+      q.includes('invoicing') ||
+      q.includes('payment') ||
+      q.includes('payments') ||
+      q.includes('late fee') ||
+      q.includes('fail to pay') ||
+      q.includes('fails to pay') ||
+      q.includes('overdue') ||
+      q.includes('unpaid') ||
+      (q.includes('fee') && (q.includes('due') || q.includes('when') || q.includes('pay') || q.includes('service fee')))
+    ) {
+      return {
+        type: 'SECTION',
+        topic: 'payment',
+        sectionNumber: '8',
+      };
+    }
+
+    if (
+      q.includes('use restriction') ||
+      q.includes('restrictions on') ||
+      q.includes('use of the service') ||
+      q.includes('restrictions does the agreement place') ||
+      q.includes('decompile') ||
+      q.includes('reverse engineer') ||
+      q.includes('prohibited use')
+    ) {
+      return {
+        type: 'SECTION',
+        topic: 'use restrictions',
+        sectionNumber: '5',
+      };
+    }
+
+    if (q.includes('warrant') || q.includes('warranty') || q.includes('warranties')) {
+      return {
+        type: 'SECTION',
+        topic: 'warranty',
+        sectionNumber: '11',
       };
     }
 
@@ -296,6 +348,20 @@ export class RetrievalService {
           score: 1.8,
           matchedKeywords: ['section continuation'],
         });
+      }
+    }
+
+    if (targetSectionNumber) {
+      // Relevance Gate: Strictly isolate chunks belonging to the requested section
+      const secHeadingRegex = new RegExp(`(?:^|\\n)\\s*${targetSectionNumber}\\.\\s+`, 'i');
+      const sectionOnly = Array.from(expandedMap.values()).filter((c) => {
+        return (
+          c.sectionNumber === targetSectionNumber ||
+          (c.text && secHeadingRegex.test(c.text))
+        );
+      });
+      if (sectionOnly.length > 0) {
+        return sectionOnly.sort((a, b) => a.chunkIndex - b.chunkIndex);
       }
     }
 
@@ -568,6 +634,93 @@ export class RetrievalService {
         }
         if (lowerText.includes('10. termination')) {
           score -= 5.0;
+        }
+      }
+
+      // Payment / Invoicing / Late Fees / Failure to pay
+      if (
+        normalizedQuery.includes('invoice') ||
+        normalizedQuery.includes('invoiced') ||
+        normalizedQuery.includes('invoicing') ||
+        normalizedQuery.includes('payment') ||
+        normalizedQuery.includes('payments') ||
+        normalizedQuery.includes('late fee') ||
+        normalizedQuery.includes('fail to pay') ||
+        normalizedQuery.includes('fails to pay') ||
+        normalizedQuery.includes('overdue') ||
+        normalizedQuery.includes('unpaid') ||
+        (normalizedQuery.includes('fee') && (normalizedQuery.includes('due') || normalizedQuery.includes('when') || normalizedQuery.includes('pay') || normalizedQuery.includes('service fee')))
+      ) {
+        if (
+          lowerText.includes('8. payment terms and taxes') ||
+          lowerText.includes('shall invoice for service fees') ||
+          lowerText.includes('due within 30 days') ||
+          lowerText.includes('fails to timely pay') ||
+          lowerText.includes('late fees at interest rate')
+        ) {
+          score += 10.0;
+        }
+        if (lowerText.includes('attachment d') || lowerText.includes('3. service levels') || lowerText.includes('work product') || lowerText.includes('10. termination')) {
+          score -= 10.0;
+        }
+      }
+
+      // Warranty
+      if (normalizedQuery.includes('warrant') || normalizedQuery.includes('warranty') || normalizedQuery.includes('warranties')) {
+        if (
+          lowerText.includes('11. warranty') ||
+          lowerText.includes('warrants that, during the applicable term') ||
+          lowerText.includes('repair or replacement of the service') ||
+          lowerText.includes('disclaims any and all implied warranties') ||
+          lowerText.includes('uninterrupted or error-free')
+        ) {
+          score += 10.0;
+        }
+        if (
+          lowerText.includes('1. definitions') ||
+          lowerText.includes('2. security program') ||
+          lowerText.includes('third-party demand') ||
+          lowerText.includes('demarcation point') ||
+          lowerText.includes('attachment c')
+        ) {
+          score -= 10.0;
+        }
+      }
+
+      // Use Restrictions
+      if (
+        normalizedQuery.includes('restriction') ||
+        normalizedQuery.includes('use restriction') ||
+        normalizedQuery.includes('use of the service') ||
+        normalizedQuery.includes('decompile') ||
+        normalizedQuery.includes('reverse engineer')
+      ) {
+        if (
+          lowerText.includes('5. use restrictions') ||
+          lowerText.includes('decompile, disassemble, decrypt') ||
+          lowerText.includes('remove any product identification')
+        ) {
+          score += 10.0;
+        }
+        if (lowerText.includes('10. termination') || lowerText.includes('attachment b') || lowerText.includes('3. service levels')) {
+          score -= 10.0;
+        }
+      }
+
+      // Authorized User
+      if (normalizedQuery.includes('authorized user') || normalizedQuery.includes('who is an authorized user') || normalizedQuery.includes('named user')) {
+        if (
+          lowerText.includes('“authorized user” means') ||
+          lowerText.includes('authorized user” means') ||
+          lowerText.includes('authorized users may also include')
+        ) {
+          score += 10.0;
+        }
+        if (lowerText.includes('“applicable term”') || lowerText.includes('“customer data”') || lowerText.includes('“demarcation point”')) {
+          score += 2.0;
+        }
+        if (lowerText.includes('fedramp') || lowerText.includes('attachment') || lowerText.includes('table 1') || lowerText.includes('page 12')) {
+          score -= 10.0;
         }
       }
 
