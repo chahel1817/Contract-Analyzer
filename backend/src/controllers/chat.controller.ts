@@ -100,6 +100,16 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       }
     }
 
+    // 5. Re-ranking: Order retrieved chunks by strict distinctive relevance & phrase density
+    const rankedChunks = retrievalService.rerankChunks(
+      query,
+      allRetrievedChunks as any,
+      classification
+    ) as TaggedChunk[];
+
+    // 6. Evidence Sufficiency Check (Answerability Gate):
+    const sufficiency = citationService.checkEvidenceSufficiency(query, rankedChunks, classification);
+
     interface VerifiedCitationRecord {
       documentId: string;
       documentTitle: string;
@@ -171,8 +181,47 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
         message: `Query classified as ${classification.type}${classification.topic ? ` (${classification.topic})` : ''}. Searching across ${documents.length} contract${documents.length !== 1 ? 's' : ''}...`,
       });
 
+      // Evidence Sufficiency Gate for Streaming
+      if (!sufficiency.sufficient) {
+        sendSse('status', {
+          message: 'Evidence sufficiency check: Insufficient evidence in contract to answer this question.',
+        });
+
+        const notFoundAnswer =
+          sufficiency.notSpecifiedMessage || 'The contract does not specify the requested information.';
+        sendSse('delta', { text: notFoundAnswer });
+
+        const assistantMessage = await prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            role: 'assistant',
+            content: notFoundAnswer,
+          },
+          include: {
+            citations: true,
+          },
+        });
+
+        await prisma.conversation.update({
+          where: { id: conversation.id },
+          data: { updatedAt: new Date() },
+        });
+
+        sendSse('done', {
+          success: true,
+          conversationId: conversation.id,
+          userMessage,
+          assistantMessage,
+          answer: notFoundAnswer,
+          citations: [],
+          retrievedChunksCount: rankedChunks.length,
+        });
+
+        return res.end();
+      }
+
       sendSse('status', {
-        message: `Retrieved ${allRetrievedChunks.length} relevant sections with full subsection coverage. Generating synthesis...`,
+        message: `Evidence sufficiency verified. Re-ranked ${rankedChunks.length} relevant sections. Generating synthesis...`,
       });
 
       const abortController = new AbortController();
@@ -184,7 +233,7 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
 
       const aiResult = await aiService.streamAnswer(
         query,
-        allRetrievedChunks,
+        rankedChunks,
         {
           signal: abortController.signal,
           onDelta: (delta: string) => {
@@ -222,6 +271,12 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
           (other) => other !== c && other.documentId === c.documentId && other.quote.includes(c.quote)
         );
       });
+
+      // Stage 3: Answer/evidence coverage check
+      const coverageResult = citationService.evaluateAnswerCoverage(aiResult.answer, finalStreamingCitations, query);
+      if (!coverageResult.hasCoverage) {
+        console.warn('[chat.controller] Streaming answer coverage warning:', coverageResult.unsupportedClaims);
+      }
 
       const assistantMessage = await prisma.message.create({
         data: {
@@ -263,7 +318,7 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
         assistantMessage,
         answer: aiResult.answer,
         citations: assistantMessage.citations,
-        retrievedChunksCount: allRetrievedChunks.length,
+        retrievedChunksCount: rankedChunks.length,
       });
 
       return res.end();
@@ -272,7 +327,37 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
     // ==========================================
     // NON-STREAMING (STANDARD JSON)
     // ==========================================
-    const aiResult = await aiService.generateAnswer(query, allRetrievedChunks);
+    if (!sufficiency.sufficient) {
+      const notFoundAnswer =
+        sufficiency.notSpecifiedMessage || 'The contract does not specify the requested information.';
+      const assistantMessage = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'assistant',
+          content: notFoundAnswer,
+        },
+        include: {
+          citations: true,
+        },
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      });
+
+      return res.status(200).json({
+        success: true,
+        conversationId: conversation.id,
+        userMessage,
+        assistantMessage,
+        answer: notFoundAnswer,
+        citations: [],
+        retrievedChunksCount: rankedChunks.length,
+      });
+    }
+
+    const aiResult = await aiService.generateAnswer(query, rankedChunks);
 
     const verifiedCitationsData: VerifiedCitationRecord[] = [];
 
@@ -305,6 +390,12 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
         (other) => other !== c && other.documentId === c.documentId && other.quote.includes(c.quote)
       );
     });
+
+    // Stage 3: Answer/evidence coverage check
+    const coverageResult = citationService.evaluateAnswerCoverage(aiResult.answer, finalNonStreamingCitations, query);
+    if (!coverageResult.hasCoverage) {
+      console.warn('[chat.controller] Answer coverage warning:', coverageResult.unsupportedClaims);
+    }
 
     const assistantMessage = await prisma.message.create({
       data: {

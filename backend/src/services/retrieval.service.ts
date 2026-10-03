@@ -749,6 +749,76 @@ export class RetrievalService {
   }
 
   /**
+   * Re-ranking Step:
+   * Re-scores retrieved candidate chunks by discounting generic boilerplate
+   * and measuring distinctive query term density, phrase alignment, and topical coherence.
+   */
+  rerankChunks<T extends { text?: string; score?: number; sectionNumber?: string | null }>(
+    query: string,
+    chunks: T[],
+    classification?: QueryClassification
+  ): T[] {
+    if (!chunks || chunks.length <= 1) return chunks || [];
+
+    const qLower = query.toLowerCase().trim();
+    const distinctiveTokens = this.tokenizeQuery(query).filter(
+      (w) =>
+        !STOP_WORDS.has(w) &&
+        !['agreement', 'contract', 'service', 'services', 'customer', 'onestream', 'section', 'clause', 'schedule'].includes(w)
+    );
+
+    const scored = chunks.map((chunk) => {
+      const text = (chunk.text || '').toLowerCase();
+      let rerankScore = chunk.score || 0;
+
+      // 1. Distinctive token density in chunk
+      let distinctiveMatches = 0;
+      for (const tok of distinctiveTokens) {
+        if (text.includes(tok)) distinctiveMatches++;
+      }
+      const distinctiveRatio = distinctiveTokens.length > 0 ? distinctiveMatches / distinctiveTokens.length : 0;
+      rerankScore += distinctiveRatio * 5.0;
+
+      // 2. Phrase bonus
+      if (distinctiveTokens.length >= 2) {
+        for (let i = 0; i < distinctiveTokens.length - 1; i++) {
+          const pair = `${distinctiveTokens[i]} ${distinctiveTokens[i + 1]}`;
+          if (text.includes(pair)) rerankScore += 3.0;
+        }
+      }
+
+      // 3. Section alignment
+      if (classification?.sectionNumber && chunk.sectionNumber === classification.sectionNumber) {
+        rerankScore += 4.0;
+      }
+
+      // 4. Cross-topic penalty (e.g. liability section when question is about pricing or payment)
+      const isPaymentOrPricing =
+        qLower.includes('pay') ||
+        qLower.includes('fee') ||
+        qLower.includes('invoic') ||
+        qLower.includes('dollar') ||
+        qLower.includes('cost');
+      if (isPaymentOrPricing && !qLower.includes('liability')) {
+        if (
+          chunk.sectionNumber === '16' ||
+          text.includes('limitation of remedies') ||
+          text.includes('aggregate liability')
+        ) {
+          rerankScore -= 8.0;
+        }
+      }
+
+      return {
+        ...chunk,
+        score: Number(rerankScore.toFixed(4)),
+      };
+    });
+
+    return scored.sort((a, b) => (b.score || 0) - (a.score || 0));
+  }
+
+  /**
    * Alias method for backward compatibility
    */
   async retrieveRelevantChunks(documentId: string, query: string, limit: number = 5): Promise<RetrievedChunk[]> {

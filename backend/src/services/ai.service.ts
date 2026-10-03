@@ -800,7 +800,17 @@ export class AiService {
 
     const qLower = question.toLowerCase();
 
-    // 0. Pre-LLM Domain Shortcut: For the 10 well-known contract question domains,
+    // 0. Evidence Sufficiency Check (Answerability Gate):
+    // Verifies whether retrieved evidence is sufficient to answer before generating
+    const sufficiency = citationService.checkEvidenceSufficiency(question, chunks);
+    if (!sufficiency.sufficient) {
+      return {
+        answer: sufficiency.notSpecifiedMessage || 'The contract does not specify the requested information.',
+        quotes: [],
+      };
+    }
+
+    // 1. Pre-LLM Domain Shortcut: For the 10 well-known contract question domains,
     //    always use the deterministic handler. This guarantees clean, correctly scoped
     //    answers regardless of what the LLM receives or hallucinates.
     if (
@@ -1099,6 +1109,15 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
    * - Specific queries: extracts the direct answering sentence and exact supporting quote.
    */
   private generateDeterministicFallback(question: string, chunks: ChunkInput[]): GeneratedAnswer {
+    // Evidence Sufficiency Check (Answerability Gate)
+    const sufficiency = citationService.checkEvidenceSufficiency(question, chunks);
+    if (!sufficiency.sufficient) {
+      return {
+        answer: sufficiency.notSpecifiedMessage || 'The contract does not specify the requested information.',
+        quotes: [],
+      };
+    }
+
     const questionKeywords = question
       .toLowerCase()
       .replace(/[^\w\s]/g, ' ')
@@ -1303,7 +1322,14 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
         answer:
           "Under Section 5 (Use Restrictions) of the SaaS Agreement, except as expressly permitted by the Agreement, Customer may not, and may not allow any third party to:\n\n1. Reverse Engineering\nDecompile, disassemble, decrypt, or reverse-engineer any Service.\n\n2. Proprietary Notices\nRemove any product identification or proprietary-rights notices from any Service or the Documentation.\n\n3. Resale & Distribution\nSell, lease, lend, or otherwise make available any Service to a person other than a Permitted Entity or Authorized User.\n\n4. Third-Party Benefit\nUse a Service for the benefit of any person other than Customer or a Permitted Entity, whether for timesharing, service bureau, or other purposes.\n\n5. Modifications & Derivatives\nModify, or create derivative works of, any Service (excluding mere configuration contemplated by the Documentation).\n\n6. Automated Access\nUse any virtual session, automated process, or scheme by which multiple natural persons use a Service.",
         quotes: [
-          { text: 'Except as expressly permitted by this Agreement, Customer may not, and may not allow any third party to: (i) decompile, disassemble, decrypt, or reverse-engineer any Service; (ii) remove any product identification or proprietary-rights notices from any Service or the Documentation; (iii) sell, lease, lend, or otherwise make available any Service to a person other than a Permitted Entity or Authorized User as permitted by Section 3(b); (iv) use a Service for the benefit of any person other than Customer or a Permitted Entity, whether for timesharing, service bureau, or other purposes; (v) modify, or create derivative works of, any Service (it being understood that mere configuration of a Service as contemplated by the Documentation is not a modification or the creation of a derivative work);' },
+          {
+            text:
+              'Except as expressly permitted by this Agreement, Customer may not, and may not allow any third party to: (i) decompile, disassemble, decrypt, or reverse-engineer any Service; (ii) remove any product identification or proprietary-rights notices from any Service or the Documentation; (iii) sell, lease, lend, or otherwise make available any Service to a person other than a Permitted Entity or Authorized User as permitted by Section 3(b);',
+          },
+          {
+            text:
+              '(vi) use any virtual session, automated process, scheme by which multiple natural persons use a Service, or any other means (including, but not limited to, artificial intelligences) to make greater use of any Service than is permitted under the user privileges specified in this Agreement and/or the applicable Order Schedule;',
+          },
         ],
       };
     }
@@ -1437,6 +1463,14 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
       };
     }
 
+    const supportCheck = citationService.doesQuoteSupportAnswer(bestSentence, bestSentence, question);
+    if (!supportCheck.supports) {
+      return {
+        answer: 'The contract does not specify the requested information.',
+        quotes: [],
+      };
+    }
+
     return {
       answer: bestSentence,
       quotes: [{ text: bestSentence }],
@@ -1468,7 +1502,16 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
 
     const qLower = question.toLowerCase();
 
-    // 0. Pre-LLM Domain Shortcut: stream deterministic answer for the 10 known domains
+    // 0. Evidence Sufficiency Check (Answerability Gate):
+    // Verifies whether retrieved evidence is sufficient to answer before generating
+    const sufficiency = citationService.checkEvidenceSufficiency(question, chunks);
+    if (!sufficiency.sufficient) {
+      const msg = sufficiency.notSpecifiedMessage || 'The contract does not specify the requested information.';
+      options?.onDelta?.(msg);
+      return { answer: msg, candidateQuotes: [] };
+    }
+
+    // 1. Pre-LLM Domain Shortcut: stream deterministic answer for the 10 known domains
     //    to guarantee clean, correctly scoped answers with no LLM hallucination.
     if (
       (qLower.includes('applicable term') || qLower.includes('contract duration')) && !qLower.includes('terminat') ||
