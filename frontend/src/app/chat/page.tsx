@@ -30,6 +30,7 @@ import {
   X,
   AlertCircle,
   ShieldCheck,
+  Bot,
 } from 'lucide-react';
 
 const MULTI_DOC_SUGGESTIONS = [
@@ -288,6 +289,13 @@ function MultiDocumentChatContent() {
 
             <div className="flex items-center gap-2">
               <Link
+                href="/agent"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-900 text-xs font-bold shadow-xs hover:bg-amber-500/25 transition"
+              >
+                <Bot className="w-3.5 h-3.5 text-amber-700" />
+                <span>Part C Agent</span>
+              </Link>
+              <Link
                 href="/assistant"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-black text-white text-xs font-bold shadow-xs transition"
               >
@@ -461,6 +469,14 @@ function MultiDocumentChatContent() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <Link
+            href="/agent"
+            className="text-xs h-8 px-3 rounded-xl bg-amber-500/15 border border-amber-400/40 text-amber-900 flex items-center gap-1.5 font-bold transition hover:bg-amber-500/25"
+          >
+            <Bot className="w-3.5 h-3.5 text-amber-700" />
+            <span className="hidden sm:inline">Part C Agent</span>
+          </Link>
+
           <Link
             href="/assistant"
             className="text-xs h-8 px-3 rounded-xl bg-neutral-900 hover:bg-black text-white flex items-center gap-1.5 font-bold transition shadow-2xs"

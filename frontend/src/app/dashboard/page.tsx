@@ -21,6 +21,7 @@ import {
   UploadCloud,
   FileCheck,
   Check,
+  Bot,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -115,6 +116,13 @@ export default function DashboardPage() {
             >
               <GitCompare className="w-3.5 h-3.5" />
               Compare
+            </Link>
+            <Link
+              href="/agent"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors flex items-center gap-1.5"
+            >
+              <Bot className="w-3.5 h-3.5 text-amber-600" />
+              Part C Agent
             </Link>
           </nav>
         </div>

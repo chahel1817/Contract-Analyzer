@@ -3,18 +3,17 @@
 import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import Comparison from '@/components/Comparison';
+import AgentResearchView from '@/components/AgentResearchView';
 import { Scale, MessageSquare, GitCompare, LayoutDashboard, Sparkles, Bot } from 'lucide-react';
 
-function CompareContent() {
+function AgentPageContent() {
   const searchParams = useSearchParams();
-  const docAId = searchParams.get('docA') || searchParams.get('documentA') || undefined;
-  const docBId = searchParams.get('docB') || searchParams.get('documentB') || undefined;
+  const initialDocId = searchParams.get('docId') || undefined;
 
-  return <Comparison initialDocAId={docAId} initialDocBId={docBId} />;
+  return <AgentResearchView initialDocumentId={initialDocId} />;
 }
 
-export default function ComparePage() {
+export default function AgentPage() {
   return (
     <div className="min-h-screen bg-[#fafaf9] text-neutral-900 font-sans selection:bg-amber-500/20 selection:text-amber-900">
       {/* Top Navbar */}
@@ -29,7 +28,7 @@ export default function ComparePage() {
                 Contract Analyzer
               </span>
               <span className="hidden sm:inline-block ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
-                Comparison Engine
+                Part C Agent
               </span>
             </div>
           </Link>
@@ -47,43 +46,43 @@ export default function ComparePage() {
               className="px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors flex items-center gap-1.5"
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
-              Dashboard
+              <span>Dashboard</span>
             </Link>
             <Link
               href="/chat"
               className="px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors flex items-center gap-1.5"
             >
               <MessageSquare className="w-3.5 h-3.5" />
-              Chat
+              <span>Chat</span>
             </Link>
             <Link
               href="/compare"
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-neutral-100 text-neutral-900 border border-neutral-200 transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors flex items-center gap-1.5"
             >
               <GitCompare className="w-3.5 h-3.5" />
-              Compare
+              <span>Compare</span>
             </Link>
             <Link
               href="/agent"
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 text-amber-800 border border-amber-400/40 transition-colors flex items-center gap-1.5 shadow-xs"
             >
-              <Bot className="w-3.5 h-3.5 text-amber-600" />
-              Part C Agent
+              <Bot className="w-3.5 h-3.5 text-amber-700" />
+              <span>Part C Agent</span>
             </Link>
           </nav>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Suspense
           fallback={
-            <div className="p-12 text-center text-neutral-400 text-sm">
-              Loading contract comparison engine...
+            <div className="min-h-[50vh] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
             </div>
           }
         >
-          <CompareContent />
+          <AgentPageContent />
         </Suspense>
       </main>
     </div>

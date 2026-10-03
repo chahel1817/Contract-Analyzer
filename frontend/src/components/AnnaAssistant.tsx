@@ -23,6 +23,7 @@ import {
   Check,
   LayoutDashboard,
   ArrowUpRight,
+  Bot,
 } from 'lucide-react';
 import {
   fetchDocuments,
@@ -370,7 +371,15 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
             </button>
           )}
 
-          {/* Quick link to Dashboard */}
+          {/* Quick link to Part C Agent & Dashboard */}
+          <Link
+            href="/agent"
+            className="flex items-center space-x-1.5 text-xs font-bold text-amber-800 bg-amber-500/10 border border-amber-400/30 px-2.5 py-1 rounded-lg hover:bg-amber-500/20 transition shadow-2xs"
+          >
+            <Bot className="w-3.5 h-3.5 text-amber-700" />
+            <span className="hidden sm:inline">Part C Agent</span>
+          </Link>
+
           <Link
             href="/dashboard"
             className="hidden sm:flex items-center space-x-1 text-xs font-medium text-neutral-500 hover:text-neutral-900 px-2.5 py-1 rounded-lg hover:bg-neutral-200/50 transition"
