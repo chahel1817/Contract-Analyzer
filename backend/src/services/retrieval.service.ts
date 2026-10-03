@@ -529,6 +529,73 @@ export class RetrievalService {
   }
 
   /**
+   * Simple linguistic stemmer for legal terminology
+   */
+  getStem(word: string): string {
+    const w = word.toLowerCase();
+    if (w.endsWith('ies')) return w.slice(0, -3) + 'y';
+    if (w.endsWith('es')) return w.slice(0, -2);
+    if (w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+    if (w.endsWith('ing')) return w.slice(0, -3);
+    if (w.endsWith('ed')) return w.slice(0, -2);
+    if (w.endsWith('tion')) return w.slice(0, -4);
+    if (w.endsWith('tional')) return w.slice(0, -6);
+    if (w.endsWith('ment')) return w.slice(0, -4);
+    if (w.endsWith('ance') || w.endsWith('ence')) return w.slice(0, -4);
+    return w;
+  }
+
+  /**
+   * Applies secondary soft domain boosts.
+   * Keeps contract section rules as soft boosts (+2..+4), not the entire retrieval engine.
+   */
+  private applySoftDomainBoosts(normalizedQuery: string, lowerText: string): number {
+    let boost = 0;
+    // Availability / service levels
+    if (normalizedQuery.includes('availab') || normalizedQuery.includes('service credit') || normalizedQuery.includes('uptime') || normalizedQuery.includes('downtime')) {
+      if (lowerText.includes('availability requirement') || lowerText.includes('service credit') || lowerText.includes('service level failure')) boost += 3.0;
+    }
+    // Customer Data & IP
+    if ((normalizedQuery.includes('customer data') || normalizedQuery.includes('data')) && (normalizedQuery.includes('intellectual property') || normalizedQuery.includes('owns') || normalizedQuery.includes('rights'))) {
+      if (lowerText.includes('customer shall own all rights') || lowerText.includes('onestream shall own all rights')) boost += 3.0;
+    }
+    // Liability
+    if (normalizedQuery.includes('liability')) {
+      if (lowerText.includes('aggregate liability') || lowerText.includes('limitation of remedies')) boost += 3.0;
+    }
+    // Confidentiality
+    if (normalizedQuery.includes('confidential') || normalizedQuery.includes('nondisclosure')) {
+      if (lowerText.includes('confidential information') || lowerText.includes('receiving party') || lowerText.includes('uniform trade secrets act')) boost += 3.0;
+    }
+    // Termination
+    if (normalizedQuery.includes('terminat') && !normalizedQuery.includes('confidential')) {
+      if (lowerText.includes('10. termination') || lowerText.includes('expiration or termination') || lowerText.includes('exclusive remedy')) boost += 3.0;
+    }
+    // Payment / Invoicing
+    if (normalizedQuery.includes('invoice') || normalizedQuery.includes('payment') || normalizedQuery.includes('late fee') || normalizedQuery.includes('fail to pay')) {
+      if (lowerText.includes('8. payment terms and taxes') || lowerText.includes('shall invoice for service fees') || lowerText.includes('late fees at interest rate')) boost += 3.0;
+    }
+    // Warranty
+    if (normalizedQuery.includes('warrant') || normalizedQuery.includes('warranty')) {
+      if (lowerText.includes('11. warranty') || lowerText.includes('warrants that, during the applicable term') || lowerText.includes('repair or replacement of the service')) boost += 3.0;
+    }
+    // Use Restrictions
+    if (normalizedQuery.includes('restriction') || normalizedQuery.includes('decompile') || normalizedQuery.includes('reverse engineer')) {
+      if (lowerText.includes('5. use restrictions') || lowerText.includes('decompile, disassemble, decrypt')) boost += 3.0;
+    }
+    // Applicable Term
+    if ((normalizedQuery.includes('applicable term') || normalizedQuery.includes('contract duration')) && !normalizedQuery.includes('terminat')) {
+      if (lowerText.includes('“applicable term”') || lowerText.includes('applicable term') || lowerText.includes('7. term.')) boost += 4.0;
+    }
+    // Authorized User
+    if (normalizedQuery.includes('authorized user') || normalizedQuery.includes('named user')) {
+      if (lowerText.includes('“authorized user” means') || lowerText.includes('authorized users may also include')) boost += 3.0;
+    }
+
+    return boost;
+  }
+
+  /**
    * Section Expansion Step:
    * Given retrieved chunks, expands them to include ALL chunks belonging to the identified section(s).
    * E.g. If one result belongs to sectionNumber = "10", retrieve every chunk with that sectionNumber.
@@ -877,234 +944,110 @@ export class RetrievalService {
 
     const keywords = this.tokenizeQuery(query);
     const normalizedQuery = query.toLowerCase().trim();
+    const stems = keywords.map((k) => this.getStem(k));
+    const N = chunks.length;
 
-    // 2. Score each chunk based on keyword frequency and exact phrase matching
-    const scoredChunks = chunks.map((chunk) => {
+    // Document lengths & corpus average length for Okapi BM25
+    const docLengths = chunks.map((c) => (c.text || c.content || '').length);
+    const avgdl = docLengths.reduce((a, b) => a + b, 0) / N;
+
+    // Compute Document Frequency (DF) & Inverse Document Frequency (IDF)
+    const df = new Map<string, number>();
+    for (let i = 0; i < keywords.length; i++) {
+      const kw = keywords[i];
+      const stem = stems[i];
+      let count = 0;
+      for (const c of chunks) {
+        const txt = (c.text || c.content || '').toLowerCase();
+        if (txt.includes(kw) || txt.includes(stem)) count++;
+      }
+      df.set(kw, count);
+    }
+
+    const idf = new Map<string, number>();
+    for (const kw of keywords) {
+      const n = df.get(kw) || 0;
+      const val = Math.max(0.2, Math.log(1 + (N - n + 0.5) / (n + 0.5)));
+      idf.set(kw, val);
+    }
+
+    const headingRegex = /(?:^|\n)\s*(\d{1,2}|[A-Z])[\.\)]\s+([A-Za-z\s/&-]{3,50})/g;
+
+    // 2. Score each chunk using BM25 + Section Metadata & Headings + Phrases + Soft Domain Boosts
+    const scoredChunks = chunks.map((chunk, idx) => {
       const chunkText = chunk.text || chunk.content || '';
       const lowerText = chunkText.toLowerCase();
+      const len = docLengths[idx];
 
-      let matchCount = 0;
+      let bm25 = 0;
+      let matchedTerms = 0;
       const matchedKeywords: string[] = [];
+      const k1 = 1.2;
+      const b = 0.75;
 
-      for (const kw of keywords) {
-        const regex = new RegExp(`\\b${kw}`, 'gi');
+      for (let i = 0; i < keywords.length; i++) {
+        const kw = keywords[i];
+        const stem = stems[i];
+        const regex = new RegExp(`\\b${stem}`, 'gi');
         const matches = lowerText.match(regex);
-        if (matches) {
-          matchCount += matches.length;
+        const tf = matches ? matches.length : 0;
+        if (tf > 0) {
+          matchedTerms++;
           matchedKeywords.push(kw);
+          const termIdf = idf.get(kw) || 0.5;
+          const num = tf * (k1 + 1);
+          const denom = tf + k1 * (1 - b + b * (len / avgdl));
+          bm25 += termIdf * (num / denom);
         }
       }
 
-      // Keyword coverage ratio (how many distinct query keywords appeared)
-      const coverage = matchedKeywords.length / (keywords.length || 1);
+      const termCoverage = keywords.length > 0 ? matchedTerms / keywords.length : 0;
+      let score = bm25 * 0.7 + termCoverage * 2.0;
 
-      // Base score from term frequency and keyword coverage
-      let score = coverage * 0.7 + Math.min(matchCount / 10, 0.3);
-
-      // Exact phrase bonus: if exact sequence of words appears in chunk
+      // Exact phrase bonus
       if (keywords.length > 1 && lowerText.includes(normalizedQuery)) {
-        score += 1.0;
+        score += 2.0;
       }
 
-      // Proximity / sub-phrase bonus (e.g. 2 adjacent query words)
+      // Proximity / sub-phrase bonus (adjacent bigrams)
       for (let i = 0; i < keywords.length - 1; i++) {
         const pair = `${keywords[i]} ${keywords[i + 1]}`;
         if (lowerText.includes(pair)) {
-          score += 0.3;
+          score += 0.5;
         }
       }
 
-      // Topic-specific section boosts and cross-topic penalties
-      if (
-        normalizedQuery.includes('availab') ||
-        normalizedQuery.includes('service credit') ||
-        normalizedQuery.includes('service level') ||
-        normalizedQuery.includes('uptime') ||
-        normalizedQuery.includes('downtime')
-      ) {
-        if (
-          lowerText.includes('availability requirement') ||
-          lowerText.includes('3. service levels') ||
-          lowerText.includes('service level failure') ||
-          lowerText.includes('service credit') ||
-          lowerText.includes('support services and service levels')
-        ) {
-          score += 10.0;
-        }
-        if (lowerText.includes('10. termination') || lowerText.includes('14. rights') || lowerText.includes('attachment d') || lowerText.includes('16. limitation')) {
-          score -= 10.0;
+      // Generic Section Metadata & Heading Alignment (Works across any contract)
+      const secTitle = (chunk.sectionTitle || '').toLowerCase();
+      let headingMatchCount = 0;
+      for (let i = 0; i < keywords.length; i++) {
+        const kw = keywords[i];
+        const stem = stems[i];
+        if (secTitle.includes(kw) || secTitle.includes(stem)) headingMatchCount++;
+      }
+
+      let hMatch: RegExpExecArray | null;
+      while ((hMatch = headingRegex.exec(chunkText)) !== null) {
+        const hText = hMatch[2].toLowerCase();
+        for (let i = 0; i < keywords.length; i++) {
+          const kw = keywords[i];
+          const stem = stems[i];
+          if (hText.includes(kw) || hText.includes(stem)) headingMatchCount++;
         }
       }
 
-      if (
-        (normalizedQuery.includes('customer data') || normalizedQuery.includes('data')) &&
-        (normalizedQuery.includes('intellectual property') || normalizedQuery.includes('owns') || normalizedQuery.includes('rights') || normalizedQuery.includes('service'))
-      ) {
-        if (
-          lowerText.includes('14. rights') ||
-          (lowerText.includes('onestream shall own all rights') && lowerText.includes('customer data')) ||
-          (lowerText.includes('customer shall own all rights') && lowerText.includes('customer data'))
-        ) {
-          score += 10.0;
-        }
-        if (lowerText.includes('attachment d') || lowerText.includes('work product') || lowerText.includes('professional services')) {
-          score -= 10.0;
-        }
-        if (lowerText.includes('10. termination')) {
-          score -= 5.0;
-        }
+      if (headingMatchCount > 0) {
+        score += Math.min(4.0, headingMatchCount * 2.0);
       }
 
-      if (normalizedQuery.includes('liability')) {
-        if (
-          lowerText.includes('16. limitation of remedies') ||
-          lowerText.includes('aggregate liability') ||
-          lowerText.includes('last 12 months')
-        ) {
-          score += 10.0;
-        }
-        if (lowerText.includes('10. termination')) {
-          score -= 5.0;
-        }
+      // Explicit section number match in query
+      const secNumMatch = query.match(/\b(?:section|clause|article)\s*(\d+[a-z]?|[A-Z])\b/i);
+      if (secNumMatch && (chunk.sectionNumber === secNumMatch[1] || lowerText.includes(`section ${secNumMatch[1]}`))) {
+        score += 4.0;
       }
 
-      // Confidentiality (§13)
-      if (
-        normalizedQuery.includes('confidential') ||
-        normalizedQuery.includes('nondisclosure') ||
-        normalizedQuery.includes('non-disclosure')
-      ) {
-        if (
-          lowerText.includes('13. confidentiality') ||
-          lowerText.includes('confidential information') ||
-          lowerText.includes('receiving party') ||
-          lowerText.includes('disclosing party') ||
-          lowerText.includes('uniform trade secrets act')
-        ) {
-          score += 10.0;
-        }
-        if (
-          lowerText.includes('attachment b') ||
-          lowerText.includes('attachment d') ||
-          lowerText.includes('8. payment') ||
-          lowerText.includes('3. service levels')
-        ) {
-          score -= 10.0;
-        }
-      }
-
-      if (normalizedQuery.includes('terminat') && !normalizedQuery.includes('confidential')) {
-        if (
-          lowerText.includes('10. termination') ||
-          lowerText.includes('expiration or termination') ||
-          lowerText.includes('exclusive remedy') ||
-          lowerText.includes('survive indefinitely any termination')
-        ) {
-          score += 10.0;
-        }
-      }
-
-      if ((normalizedQuery.includes('applicable term') || normalizedQuery.includes('contract duration')) && !normalizedQuery.includes('terminat')) {
-        if (
-          lowerText.includes('“applicable term” means') ||
-          lowerText.includes('applicable term” means') ||
-          lowerText.includes('applicable term shall commence') ||
-          lowerText.includes('7. term.') ||
-          lowerText.includes('1. definitions.')
-        ) {
-          score += 10.0;
-        }
-        if (lowerText.includes('10. termination')) {
-          score -= 5.0;
-        }
-      }
-
-      // Payment / Invoicing / Late Fees / Failure to pay
-      if (
-        normalizedQuery.includes('invoice') ||
-        normalizedQuery.includes('invoiced') ||
-        normalizedQuery.includes('invoicing') ||
-        normalizedQuery.includes('payment') ||
-        normalizedQuery.includes('payments') ||
-        normalizedQuery.includes('late fee') ||
-        normalizedQuery.includes('fail to pay') ||
-        normalizedQuery.includes('fails to pay') ||
-        normalizedQuery.includes('overdue') ||
-        normalizedQuery.includes('unpaid') ||
-        (normalizedQuery.includes('fee') && (normalizedQuery.includes('due') || normalizedQuery.includes('when') || normalizedQuery.includes('pay') || normalizedQuery.includes('service fee')))
-      ) {
-        if (
-          lowerText.includes('8. payment terms and taxes') ||
-          lowerText.includes('shall invoice for service fees') ||
-          lowerText.includes('due within 30 days') ||
-          lowerText.includes('fails to timely pay') ||
-          lowerText.includes('late fees at interest rate')
-        ) {
-          score += 10.0;
-        }
-        if (lowerText.includes('attachment d') || lowerText.includes('3. service levels') || lowerText.includes('work product') || lowerText.includes('10. termination')) {
-          score -= 10.0;
-        }
-      }
-
-      // Warranty
-      if (normalizedQuery.includes('warrant') || normalizedQuery.includes('warranty') || normalizedQuery.includes('warranties')) {
-        if (
-          lowerText.includes('11. warranty') ||
-          lowerText.includes('warrants that, during the applicable term') ||
-          lowerText.includes('repair or replacement of the service') ||
-          lowerText.includes('disclaims any and all implied warranties') ||
-          lowerText.includes('uninterrupted or error-free')
-        ) {
-          score += 10.0;
-        }
-        if (
-          lowerText.includes('1. definitions') ||
-          lowerText.includes('2. security program') ||
-          lowerText.includes('third-party demand') ||
-          lowerText.includes('demarcation point') ||
-          lowerText.includes('attachment c')
-        ) {
-          score -= 10.0;
-        }
-      }
-
-      // Use Restrictions
-      if (
-        normalizedQuery.includes('restriction') ||
-        normalizedQuery.includes('use restriction') ||
-        normalizedQuery.includes('use of the service') ||
-        normalizedQuery.includes('decompile') ||
-        normalizedQuery.includes('reverse engineer')
-      ) {
-        if (
-          lowerText.includes('5. use restrictions') ||
-          lowerText.includes('decompile, disassemble, decrypt') ||
-          lowerText.includes('remove any product identification')
-        ) {
-          score += 10.0;
-        }
-        if (lowerText.includes('10. termination') || lowerText.includes('attachment b') || lowerText.includes('3. service levels')) {
-          score -= 10.0;
-        }
-      }
-
-      // Authorized User
-      if (normalizedQuery.includes('authorized user') || normalizedQuery.includes('who is an authorized user') || normalizedQuery.includes('named user')) {
-        if (
-          lowerText.includes('“authorized user” means') ||
-          lowerText.includes('authorized user” means') ||
-          lowerText.includes('authorized users may also include')
-        ) {
-          score += 10.0;
-        }
-        if (lowerText.includes('“applicable term”') || lowerText.includes('“customer data”') || lowerText.includes('“demarcation point”')) {
-          score += 2.0;
-        }
-        if (lowerText.includes('fedramp') || lowerText.includes('attachment') || lowerText.includes('table 1') || lowerText.includes('page 12')) {
-          score -= 10.0;
-        }
-      }
+      // Soft secondary domain boosts (not hard overrides)
+      score += this.applySoftDomainBoosts(normalizedQuery, lowerText);
 
       return {
         id: chunk.id,

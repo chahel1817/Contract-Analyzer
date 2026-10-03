@@ -288,12 +288,13 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       if (!coverageResult.hasCoverage) {
         console.warn('[chat.controller] Streaming answer coverage warning:', coverageResult.unsupportedClaims);
       }
+      const finalAnswer = coverageResult.filteredAnswer || aiResult.answer;
 
       const assistantMessage = await prisma.message.create({
         data: {
           conversationId: conversation.id,
           role: 'assistant',
-          content: aiResult.answer,
+          content: finalAnswer,
           citations: {
             create: finalStreamingCitations.map((c) => ({
               documentId: c.documentId,
@@ -327,7 +328,7 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
         conversationId: conversation.id,
         userMessage,
         assistantMessage,
-        answer: aiResult.answer,
+        answer: finalAnswer,
         citations: assistantMessage.citations,
         retrievedChunksCount: rankedChunks.length,
       });
@@ -407,12 +408,13 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
     if (!coverageResult.hasCoverage) {
       console.warn('[chat.controller] Answer coverage warning:', coverageResult.unsupportedClaims);
     }
+    const finalAnswer = coverageResult.filteredAnswer || aiResult.answer;
 
     const assistantMessage = await prisma.message.create({
       data: {
         conversationId: conversation.id,
         role: 'assistant',
-        content: aiResult.answer,
+        content: finalAnswer,
         citations: {
           create: finalNonStreamingCitations.map((c) => ({
             documentId: c.documentId,
@@ -446,7 +448,7 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       conversationId: conversation.id,
       userMessage,
       assistantMessage,
-      answer: aiResult.answer,
+      answer: finalAnswer,
       citations: assistantMessage.citations,
       retrievedChunksCount: allRetrievedChunks.length,
     });

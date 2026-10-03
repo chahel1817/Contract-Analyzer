@@ -37,10 +37,22 @@ export interface EvidenceSufficiencyResult {
   bestPassages?: string[];
 }
 
+export interface EvidenceCoverage {
+  claim: string;
+  supported: boolean;
+  supportingQuotes: string[];
+  citationIds?: string[];
+  score: number;
+  reason?: string;
+}
+
 export interface AnswerCoverageResult {
   hasCoverage: boolean;
   coverageRatio: number;
+  claims: EvidenceCoverage[];
+  supportedClaims: string[];
   unsupportedClaims: string[];
+  filteredAnswer?: string;
 }
 
 export class CitationService {
@@ -522,12 +534,134 @@ export class CitationService {
   }
 
   /**
+   * Helper tokenizer for claim/evidence coverage comparison
+   */
+  private tokenizeForCoverage(text: string): Set<string> {
+    const COVERAGE_STOP_WORDS = new Set([
+      'that', 'this', 'with', 'from', 'have', 'been', 'were', 'what', 'when', 'where',
+      'which', 'will', 'would', 'shall', 'should', 'could', 'about', 'under', 'their',
+      'there', 'these', 'those', 'other', 'after', 'before', 'between', 'during', 'such',
+      'each', 'both', 'either', 'neither', 'some', 'any', 'every', 'into', 'over', 'than',
+      'agreement', 'party', 'parties', 'contract', 'section', 'hereof', 'herein',
+      'thereof', 'therein', 'schedule', 'schedules', 'order', 'orders', 'customer',
+      'onestream', 'service', 'services', 'must', 'does', 'also', 'and', 'the', 'for'
+    ]);
+
+    return new Set(
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 3 && !COVERAGE_STOP_WORDS.has(w))
+    );
+  }
+
+  /**
+   * Extracts substantive factual claims and bullet statements from an answer.
+   * Filters out structural headers, section introductions, and short fragments.
+   */
+  extractAnswerClaims(answer: string): Array<{ raw: string; text: string }> {
+    const lines = answer.split('\n');
+    const claims: Array<{ raw: string; text: string }> = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      // Skip structural headers, introductory phrases, or section titles
+      if (
+        /^under section/i.test(line) ||
+        /^section \d+/i.test(line) ||
+        /^\d+\.\s+[A-Za-z\s/&-]+(?:\s*\(.*\))?$/i.test(line) ||
+        (line.endsWith(':') && line.length < 60)
+      ) {
+        continue;
+      }
+
+      // Bullet points: treat each bullet item as an independent claim
+      if (/^[-*•]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+        const cleaned = line.replace(/^[-*•\d.)\s]+/, '').trim();
+        // Remove leading inline label prefixes (e.g., "Non-Disclosure: ", "Restricted Purpose: ")
+        const withoutLabel = cleaned.replace(/^[A-Za-z\s/&-]+:\s*/, '').trim();
+        if (withoutLabel.length >= 15) {
+          claims.push({ raw: line, text: withoutLabel });
+        }
+        continue;
+      }
+
+      // Split paragraphs into individual sentences
+      const sentences = line.split(/(?<=[.?!])\s+/);
+      for (const sent of sentences) {
+        const s = sent.trim();
+        if (s.length >= 20 && !s.endsWith(':')) {
+          claims.push({ raw: s, text: s });
+        }
+      }
+    }
+
+    return claims;
+  }
+
+  /**
+   * Evaluates whether a candidate verified quote provides substantive evidence
+   * for a specific claim sentence.
+   */
+  doesQuoteSupportClaim(
+    quoteText: string,
+    claimText: string
+  ): { supported: boolean; score: number; reason?: string } {
+    const qClean = quoteText.toLowerCase();
+    const cClean = claimText.toLowerCase();
+
+    // Direct textual containment
+    if (qClean.includes(cClean) || cClean.includes(qClean)) {
+      return { supported: true, score: 1.0, reason: 'Direct textual containment' };
+    }
+
+    const qTerms = this.tokenizeForCoverage(quoteText);
+    const cTerms = this.tokenizeForCoverage(claimText);
+
+    if (qTerms.size === 0 || cTerms.size === 0) {
+      return { supported: false, score: 0, reason: 'Insufficient substantive terms' };
+    }
+
+    let matchCount = 0;
+    for (const term of cTerms) {
+      if (qTerms.has(term)) matchCount++;
+    }
+
+    const coverage = matchCount / cTerms.size;
+
+    // Substantive overlap threshold:
+    // If claim has multiple distinctive terms, require at least 2 matches and >= 25% overlap
+    if (matchCount >= 2 && coverage >= 0.25) {
+      return {
+        supported: true,
+        score: Number(coverage.toFixed(2)),
+        reason: `Shares ${matchCount} substantive terms (${Math.round(coverage * 100)}% overlap)`,
+      };
+    }
+
+    // For very concise claims (1 distinctive term), 1 exact match is sufficient
+    if (cTerms.size === 1 && matchCount === 1) {
+      return { supported: true, score: 1.0, reason: 'Direct single-term match' };
+    }
+
+    return {
+      supported: false,
+      score: Number(coverage.toFixed(2)),
+      reason: `Insufficient substantive overlap (${matchCount}/${cTerms.size} terms)`,
+    };
+  }
+
+  /**
    * Answer/evidence coverage evaluation:
-   * Checks whether the generated answer is backed by verified evidence.
+   * Extracts every claim from the answer and verifies whether supporting
+   * quotes exist. If unsupported claims exist, provides pruned filteredAnswer.
    */
   evaluateAnswerCoverage(
     answer: string,
-    verifiedQuotes: Array<{ quote?: string; text?: string }>,
+    verifiedQuotes: Array<{ quote?: string; text?: string; id?: string }>,
     question?: string
   ): AnswerCoverageResult {
     const lowerAns = (answer || '').toLowerCase().trim();
@@ -541,22 +675,87 @@ export class CitationService {
       return {
         hasCoverage: true,
         coverageRatio: 1.0,
+        claims: [],
+        supportedClaims: [],
         unsupportedClaims: [],
+        filteredAnswer: answer,
       };
     }
+
+    const claims = this.extractAnswerClaims(answer);
 
     if (!verifiedQuotes || verifiedQuotes.length === 0) {
       return {
         hasCoverage: false,
         coverageRatio: 0.0,
-        unsupportedClaims: ['No verified quotes found to substantiate the answer claims.'],
+        claims: claims.map((c) => ({
+          claim: c.text,
+          supported: false,
+          supportingQuotes: [],
+          score: 0,
+        })),
+        supportedClaims: [],
+        unsupportedClaims: claims.map((c) => c.text),
+        filteredAnswer: 'The contract does not specify verified evidence to support these claims.',
       };
     }
 
+    const coverageDetails: EvidenceCoverage[] = [];
+    const supportedClaims: string[] = [];
+    const unsupportedClaims: string[] = [];
+
+    for (const item of claims) {
+      let isSupported = false;
+      let maxScore = 0;
+      const supportingQuotes: string[] = [];
+      const citationIds: string[] = [];
+
+      for (const vq of verifiedQuotes) {
+        const qText = vq.quote || vq.text || '';
+        const res = this.doesQuoteSupportClaim(qText, item.text);
+        if (res.supported) {
+          isSupported = true;
+          if (res.score > maxScore) maxScore = res.score;
+          supportingQuotes.push(qText);
+          if (vq.id) citationIds.push(vq.id);
+        }
+      }
+
+      coverageDetails.push({
+        claim: item.text,
+        supported: isSupported,
+        supportingQuotes,
+        citationIds: citationIds.length > 0 ? citationIds : undefined,
+        score: maxScore,
+      });
+
+      if (isSupported) {
+        supportedClaims.push(item.text);
+      } else {
+        unsupportedClaims.push(item.text);
+      }
+    }
+
+    const coverageRatio = claims.length > 0 ? supportedClaims.length / claims.length : 1.0;
+
+    // Prune unsupported claim lines from answer prose if any exist
+    let filteredAnswer = answer;
+    if (unsupportedClaims.length > 0 && supportedClaims.length > 0) {
+      const remainingLines = answer.split('\n').filter((line) => {
+        return !unsupportedClaims.some((unsupported) => line.includes(unsupported));
+      });
+      filteredAnswer = remainingLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    } else if (unsupportedClaims.length > 0 && supportedClaims.length === 0) {
+      filteredAnswer = 'The contract does not specify verified evidence to support these claims.';
+    }
+
     return {
-      hasCoverage: true,
-      coverageRatio: 1.0,
-      unsupportedClaims: [],
+      hasCoverage: coverageRatio >= 0.5,
+      coverageRatio: Number(coverageRatio.toFixed(2)),
+      claims: coverageDetails,
+      supportedClaims,
+      unsupportedClaims,
+      filteredAnswer,
     };
   }
 
