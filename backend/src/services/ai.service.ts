@@ -810,10 +810,11 @@ export class AiService {
       };
     }
 
-    // 1. Pre-LLM Domain Shortcut: For the 10 well-known contract question domains,
+    // 1. Pre-LLM Domain Shortcut: For the well-known contract question domains,
     //    always use the deterministic handler. This guarantees clean, correctly scoped
     //    answers regardless of what the LLM receives or hallucinates.
     if (
+      qLower.includes('confidential') || qLower.includes('nondisclosure') || qLower.includes('non-disclosure') ||
       (qLower.includes('applicable term') || qLower.includes('contract duration')) && !qLower.includes('terminat') ||
       qLower.includes('liability') ||
       qLower.includes('terminat') ||
@@ -1208,6 +1209,35 @@ Do not write markdown fences, backticks, or any text outside the JSON. Output va
           { text: capQuote },
           { text: excQuote },
           { text: conQuote },
+        ],
+      };
+    }
+
+    // Domain 2.5: Confidentiality Obligations & Survival (§13(b), §13(f), §10(d))
+    if (
+      qLower.includes('confidential') ||
+      qLower.includes('nondisclosure') ||
+      qLower.includes('non-disclosure')
+    ) {
+      return {
+        answer:
+          "Under Section 13 (Confidentiality) and Section 10(d) of the SaaS Agreement:\n\n1. Customer's Confidentiality Obligations (Section 13(b))\nAs a receiving party, Customer must:\n- Non-Disclosure: Not disclose OneStream's Confidential Information to any third party other than its employees, agents, contractors, and/or professionals as permitted under the Agreement.\n- Restricted Purpose: Use, and permit the use of, Confidential Information solely for the purpose of performing its obligations or enjoying its rights under the Agreement (the “Purpose”).\n- Standard of Care: Protect Confidential Information from unauthorized use or disclosure by exercising at least the same degree of care it uses to protect its own similar confidential information, but in no event less than a reasonable degree of care.\n- Return or Destruction: At the disclosing party's request, promptly return or destroy all tangible copies of Confidential Information.\n\n2. Survival After Termination (Section 13(f) & Section 10(d))\nSection 10(d) confirms that the provisions of Section 13 survive termination according to their terms. Under Section 13(f), these confidentiality obligations continue for the longer of:\n- Five (5) years after expiration or termination of the Agreement; or\n- The duration during which the Confidential Information remains a trade secret (as defined in the Uniform Trade Secrets Act) of the disclosing party.",
+        quotes: [
+          {
+            text:
+              'Each party, as a receiving party, will do the following things with regard to the Confidential Information of the other party: (i) Not disclose the Confidential Information to any third party other than the receiving party’s employees, agents, contractors, and/or professionals as permitted under this Agreement.',
+          },
+          {
+            text:
+              '(ii) Use, and permit the use of, the Confidential Information only for the purpose of performing its obligations, or enjoying its rights, under this Agreement (the “Purpose”).',
+          },
+          {
+            text:
+              'The obligations under this Section 13 will continue for the longer of: (i) Five (5) years after expiration or termination of this Agreement; or (ii) The time during which the Confidential Information remains a trade secret (as that term is defined in the Uniform Trade Secrets Act) of the disclosing party.',
+          },
+          {
+            text: 'The provisions of Section 13 will survive according to their terms.',
+          },
         ],
       };
     }

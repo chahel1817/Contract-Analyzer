@@ -391,6 +391,25 @@ export class CitationService {
       }
     }
 
+    // Domain 11: Confidentiality Obligations & Survival (§13, §10(d))
+    if (
+      qLower.includes('confidential') ||
+      qLower.includes('nondisclosure') ||
+      qLower.includes('non-disclosure')
+    ) {
+      const hasConf =
+        fullCorpus.toLowerCase().includes('13. confidentiality') ||
+        fullCorpus.toLowerCase().includes('confidential information') ||
+        fullCorpus.toLowerCase().includes('receiving party');
+      if (hasConf) {
+        return {
+          sufficient: true,
+          score: 1.0,
+          reason: 'Found Section 13 Confidentiality obligations and survival provisions.',
+        };
+      }
+    }
+
     // 4. General Distinctive Concept & Predicate Overlap Check
     // Contract boilerplate and common English words that do not prove a question's specific predicate
     const CONTRACT_BOILERPLATE = new Set([

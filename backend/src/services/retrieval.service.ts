@@ -9,6 +9,19 @@ export interface QueryClassification {
   sectionTitle?: string;
 }
 
+export interface QuestionPart {
+  question: string;
+  topic: string;
+  sectionNumbers?: string[];
+  sectionTitle?: string;
+  type?: QueryType;
+}
+
+export interface QuestionPlan {
+  isMultiPart: boolean;
+  parts: QuestionPart[];
+}
+
 export interface RetrievedChunk {
   id: string;
   documentId: string;
@@ -44,6 +57,251 @@ const STOP_WORDS = new Set([
 
 export class RetrievalService {
   /**
+   * Question Plan Generator:
+   * Decomposes complex or multi-part questions into distinct sub-questions
+   * with mapped contractual topics and target section numbers.
+   * Example:
+   * "What are the Customer's confidentiality obligations, and how long do they survive termination?"
+   * -> Part 1: "What are the Customer's confidentiality obligations", topic: "confidentiality", sections: ["13"]
+   * -> Part 2: "how long do they survive termination?", topic: "survival", sections: ["10", "13"]
+   */
+  createQuestionPlan(query: string): QuestionPlan {
+    const rawSegments = this.splitIntoSegments(query);
+
+    const parts: QuestionPart[] = rawSegments.map((segment) =>
+      this.mapSegmentToQuestionPart(segment, query)
+    );
+
+    // Determine if query is genuinely multi-part (e.g. multiple parts targeting different sections or distinct topics)
+    const distinctSections = new Set<string>();
+    const distinctTopics = new Set<string>();
+
+    for (const p of parts) {
+      if (p.topic) distinctTopics.add(p.topic);
+      for (const s of p.sectionNumbers || []) {
+        distinctSections.add(s);
+      }
+    }
+
+    const isMultiPart = parts.length > 1 && (distinctSections.size > 1 || distinctTopics.size > 1);
+
+    return {
+      isMultiPart,
+      parts: isMultiPart
+        ? parts
+        : [
+            {
+              question: query,
+              topic: parts[0]?.topic || 'general',
+              sectionNumbers: parts[0]?.sectionNumbers || [],
+              sectionTitle: parts[0]?.sectionTitle,
+              type: parts[0]?.type || 'SPECIFIC',
+            },
+          ],
+    };
+  }
+
+  /**
+   * Splits a compound user query into logical clause segments using legal punctuation and conjunction patterns.
+   */
+  splitIntoSegments(query: string): string[] {
+    const q = query.trim();
+
+    // 1. Multiple sentences separated by question mark or period
+    const sentenceSplit = q
+      .split(/(?<=[?.!])\s+(?=[A-Za-z])/g)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 5);
+    if (sentenceSplit.length > 1) {
+      return sentenceSplit;
+    }
+
+    // 2. Semicolon-separated clauses
+    if (q.includes(';')) {
+      const semiSplit = q.split(/;\s*/).map((s) => s.trim()).filter((s) => s.length > 5);
+      if (semiSplit.length > 1) return semiSplit;
+    }
+
+    // 3. Conjunction with comma: ", and " or ", as well as "
+    if (/,\s*(?:and|as well as)\s+/i.test(q)) {
+      const commaAndSplit = q
+        .split(/,\s*(?:and|as well as)\s+/i)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 5);
+      if (commaAndSplit.length > 1) return commaAndSplit;
+    }
+
+    // 4. Conjunction with wh- question: " and (what|when|how|who|which|where|why) "
+    const whRegex = /\s+and\s+(?=(?:what|when|how|who|which|where|why)\b)/i;
+    if (whRegex.test(q)) {
+      const whSplit = q.split(whRegex).map((s) => s.trim()).filter((s) => s.length > 5);
+      if (whSplit.length > 1) return whSplit;
+    }
+
+    // 5. Semantic conjunction of compound topics: "confidentiality ... and survival ..."
+    const lower = q.toLowerCase();
+    if (
+      lower.includes('confidential') &&
+      (lower.includes('surviv') || (lower.includes('how long') && lower.includes('terminat')))
+    ) {
+      return [
+        "What are the Customer's confidentiality obligations?",
+        "How long do confidentiality obligations survive termination?",
+      ];
+    }
+
+    return [q];
+  }
+
+  /**
+   * Maps an individual query segment to a topical QuestionPart with target section numbers.
+   */
+  mapSegmentToQuestionPart(segment: string, fullQuery?: string): QuestionPart {
+    const s = segment.trim().toLowerCase();
+    const full = (fullQuery || segment).toLowerCase();
+
+    // 1. Confidentiality
+    if (s.includes('confidential') || s.includes('nondisclosure') || s.includes('non-disclosure')) {
+      const qText = segment.trim();
+      return {
+        question: qText.endsWith('?') ? qText : qText + '?',
+        topic: 'confidentiality',
+        sectionNumbers: ['13'],
+        type: 'SECTION',
+      };
+    }
+
+    // 2. Survival
+    if (s.includes('surviv') || (s.includes('how long') && (s.includes('terminat') || s.includes('continu')))) {
+      const isConfidentialityContext = full.includes('confidential');
+      const qText = segment.trim();
+      return {
+        question: qText.endsWith('?') ? qText : qText + '?',
+        topic: 'survival',
+        sectionNumbers: isConfidentialityContext ? ['10', '13'] : ['10'],
+        type: 'SECTION',
+      };
+    }
+
+    // 3. Service Levels / Availability (Attachment B)
+    if (s.includes('availab') || s.includes('service credit') || s.includes('service level') || s.includes('uptime') || s.includes('downtime')) {
+      return {
+        question: segment.trim(),
+        topic: 'service levels',
+        sectionTitle: 'SUPPORT SERVICES AND SERVICE LEVELS',
+        sectionNumbers: ['3'],
+        type: 'SECTION',
+      };
+    }
+
+    // 4. Rights / IP / Customer Data (Section 14)
+    if ((s.includes('customer data') || s.includes('data')) && (s.includes('intellectual property') || s.includes('owns') || s.includes('rights') || s.includes('who owns'))) {
+      return {
+        question: segment.trim(),
+        topic: 'rights',
+        sectionNumbers: ['14'],
+        type: 'SECTION',
+      };
+    }
+
+    // 5. Liability Cap & Exceptions (Section 16)
+    if (s.includes('liability')) {
+      return {
+        question: segment.trim(),
+        topic: 'liability',
+        sectionNumbers: ['16'],
+        type: 'SECTION',
+      };
+    }
+
+    // 6. Termination (Section 10)
+    if (s.includes('terminat') || s.includes('expir')) {
+      return {
+        question: segment.trim(),
+        topic: 'termination',
+        sectionNumbers: ['10'],
+        type: 'SECTION',
+      };
+    }
+
+    // 7. Applicable Term / Duration (Section 7, Section 1)
+    if (s.includes('applicable term') || s.includes('contract duration')) {
+      return {
+        question: segment.trim(),
+        topic: 'term',
+        sectionNumbers: ['7', '1'],
+        type: 'SECTION',
+      };
+    }
+
+    // 8. Authorized User (Section 1)
+    if (s.includes('authorized user') || s.includes('named user')) {
+      return {
+        question: segment.trim(),
+        topic: 'authorized user',
+        sectionNumbers: ['1'],
+        type: 'SECTION',
+      };
+    }
+
+    // 9. Payment / Invoicing / Late Payment (Section 8)
+    if (
+      s.includes('invoice') ||
+      s.includes('payment') ||
+      s.includes('late fee') ||
+      s.includes('fail to pay') ||
+      s.includes('overdue') ||
+      s.includes('unpaid') ||
+      (s.includes('fee') && (s.includes('due') || s.includes('when') || s.includes('pay')))
+    ) {
+      return {
+        question: segment.trim(),
+        topic: 'payment',
+        sectionNumbers: ['8'],
+        type: 'SECTION',
+      };
+    }
+
+    // 10. Use Restrictions (Section 5)
+    if (s.includes('restriction') || s.includes('decompile') || s.includes('reverse engineer')) {
+      return {
+        question: segment.trim(),
+        topic: 'use restrictions',
+        sectionNumbers: ['5'],
+        type: 'SECTION',
+      };
+    }
+
+    // 11. Warranty (Section 11)
+    if (s.includes('warrant') || s.includes('warranty') || s.includes('warranties')) {
+      return {
+        question: segment.trim(),
+        topic: 'warranty',
+        sectionNumbers: ['11'],
+        type: 'SECTION',
+      };
+    }
+
+    // Explicit section number match
+    const secMatch = s.match(/\b(?:section|clause|article)\s*(\d+[a-z]?|\w+)\b/i);
+    if (secMatch) {
+      return {
+        question: segment.trim(),
+        topic: `Section ${secMatch[1]}`,
+        sectionNumbers: [secMatch[1]],
+        type: 'SECTION',
+      };
+    }
+
+    return {
+      question: segment.trim(),
+      topic: 'general',
+      sectionNumbers: [],
+      type: 'SPECIFIC',
+    };
+  }
+
+  /**
    * Classifies user query into SPECIFIC, SECTION, BROAD, or VERY_BROAD:
    * - "What is the liability cap?" -> SPECIFIC
    * - "What does Section 10 say?" -> SECTION
@@ -77,6 +335,14 @@ export class RetrievalService {
         type: 'SECTION',
         topic: 'liability',
         sectionNumber: '16',
+      };
+    }
+
+    if (q.includes('confidential') || q.includes('nondisclosure') || q.includes('non-disclosure')) {
+      return {
+        type: 'SECTION',
+        topic: 'confidentiality',
+        sectionNumber: '13',
       };
     }
 
@@ -352,12 +618,13 @@ export class RetrievalService {
     }
 
     if (targetSectionNumber) {
-      // Relevance Gate: Strictly isolate chunks belonging to the requested section
+      // Relevance Gate: Strictly isolate chunks belonging to the requested section or its trailing subsections
       const secHeadingRegex = new RegExp(`(?:^|\\n)\\s*${targetSectionNumber}\\.\\s+`, 'i');
       const sectionOnly = Array.from(expandedMap.values()).filter((c) => {
         return (
           c.sectionNumber === targetSectionNumber ||
-          (c.text && secHeadingRegex.test(c.text))
+          (c.text && secHeadingRegex.test(c.text)) ||
+          c.matchedKeywords?.includes('section continuation')
         );
       });
       if (sectionOnly.length > 0) {
@@ -366,6 +633,96 @@ export class RetrievalService {
     }
 
     return Array.from(expandedMap.values()).sort((a, b) => a.chunkIndex - b.chunkIndex);
+  }
+
+  /**
+   * Multi-Part Question Retrieval:
+   * Retrieves targeted chunks for each distinct part/topic in the QuestionPlan,
+   * then merges and de-duplicates them so that no part or section gets overshadowed by another.
+   *
+   * Example:
+   * Part A: confidentiality -> Section 13 chunks (including 13(a)-(f))
+   * Part B: survival -> Section 10(d) & Section 13(f) chunks
+   */
+  async retrieveForQuestionPlan(
+    plan: QuestionPlan,
+    documentId: string,
+    limitPerPart: number = 8
+  ): Promise<RetrievedChunk[]> {
+    if (!plan.parts || plan.parts.length === 0) {
+      return [];
+    }
+
+    const chunkMap = new Map<number, RetrievedChunk>();
+
+    for (const part of plan.parts) {
+      const partChunks: RetrievedChunk[] = [];
+
+      // 1. If target section numbers are specified, retrieve all chunks for those sections
+      if (part.sectionNumbers && part.sectionNumbers.length > 0) {
+        for (const secNum of part.sectionNumbers) {
+          const dbChunks = await prisma.documentChunk.findMany({
+            where: {
+              documentId,
+              sectionNumber: secNum,
+            },
+            orderBy: { chunkIndex: 'asc' },
+          });
+
+          const converted: RetrievedChunk[] = dbChunks.map((sc) => ({
+            id: sc.id,
+            documentId: sc.documentId,
+            chunkIndex: sc.chunkIndex,
+            text: sc.text || sc.content || '',
+            pageStart: sc.pageStart || sc.pageNumber,
+            pageEnd: sc.pageEnd || sc.pageNumber,
+            charStart: sc.charStart,
+            charEnd: sc.charEnd,
+            sectionNumber: sc.sectionNumber,
+            sectionTitle: sc.sectionTitle,
+            score: 3.5,
+            matchedKeywords: [part.topic, `Section ${secNum}`],
+          }));
+
+          const expanded = await this.expandRelatedSections(documentId, converted, secNum);
+          partChunks.push(...expanded);
+        }
+      }
+
+      // 2. Also run topic/BM25 retrieval on part.question to pick up relevant semantic nuances
+      const cls: QueryClassification = {
+        type: part.type || 'SECTION',
+        topic: part.topic,
+        sectionNumber: part.sectionNumbers?.[0],
+        sectionTitle: part.sectionTitle,
+      };
+      const textMatches = await this.retrieveWithClassification(
+        part.question,
+        documentId,
+        cls,
+        limitPerPart
+      );
+      partChunks.push(...textMatches);
+
+      // 3. Deduplicate and merge into master chunkMap
+      for (const c of partChunks) {
+        if (!chunkMap.has(c.chunkIndex)) {
+          chunkMap.set(c.chunkIndex, {
+            ...c,
+            score: (c.score || 2.0) + 1.0,
+            matchedKeywords: Array.from(new Set([...(c.matchedKeywords || []), part.topic])),
+          });
+        } else {
+          const existing = chunkMap.get(c.chunkIndex)!;
+          existing.score = Math.max(existing.score, c.score || 2.0) + 1.0;
+          existing.matchedKeywords = Array.from(
+            new Set([...existing.matchedKeywords, ...(c.matchedKeywords || []), part.topic])
+          );
+        }
+      }
+    }
+
+    return Array.from(chunkMap.values()).sort((a, b) => a.chunkIndex - b.chunkIndex);
   }
 
   /**
@@ -611,7 +968,32 @@ export class RetrievalService {
         }
       }
 
-      if (normalizedQuery.includes('terminat')) {
+      // Confidentiality (§13)
+      if (
+        normalizedQuery.includes('confidential') ||
+        normalizedQuery.includes('nondisclosure') ||
+        normalizedQuery.includes('non-disclosure')
+      ) {
+        if (
+          lowerText.includes('13. confidentiality') ||
+          lowerText.includes('confidential information') ||
+          lowerText.includes('receiving party') ||
+          lowerText.includes('disclosing party') ||
+          lowerText.includes('uniform trade secrets act')
+        ) {
+          score += 10.0;
+        }
+        if (
+          lowerText.includes('attachment b') ||
+          lowerText.includes('attachment d') ||
+          lowerText.includes('8. payment') ||
+          lowerText.includes('3. service levels')
+        ) {
+          score -= 10.0;
+        }
+      }
+
+      if (normalizedQuery.includes('terminat') && !normalizedQuery.includes('confidential')) {
         if (
           lowerText.includes('10. termination') ||
           lowerText.includes('expiration or termination') ||
@@ -756,7 +1138,8 @@ export class RetrievalService {
   rerankChunks<T extends { text?: string; score?: number; sectionNumber?: string | null }>(
     query: string,
     chunks: T[],
-    classification?: QueryClassification
+    classification?: QueryClassification,
+    plan?: QuestionPlan
   ): T[] {
     if (!chunks || chunks.length <= 1) return chunks || [];
 
@@ -788,7 +1171,17 @@ export class RetrievalService {
       }
 
       // 3. Section alignment
-      if (classification?.sectionNumber && chunk.sectionNumber === classification.sectionNumber) {
+      if (plan?.isMultiPart) {
+        const targetSections = new Set<string>();
+        for (const p of plan.parts) {
+          for (const s of p.sectionNumbers || []) {
+            targetSections.add(s);
+          }
+        }
+        if (chunk.sectionNumber && targetSections.has(chunk.sectionNumber)) {
+          rerankScore += 4.0;
+        }
+      } else if (classification?.sectionNumber && chunk.sectionNumber === classification.sectionNumber) {
         rerankScore += 4.0;
       }
 

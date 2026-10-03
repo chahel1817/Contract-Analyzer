@@ -77,7 +77,8 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       chunkIndex: number;
     }
 
-    // 4. Classify Query: SPECIFIC vs SECTION vs BROAD
+    // 4. Formulate Question Plan & Classify Query
+    const plan = retrievalService.createQuestionPlan(query);
     const classification = retrievalService.classifyQuery(query);
     const chunkLimit = classification.type === 'SPECIFIC' ? 5 : 10;
 
@@ -86,7 +87,9 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
 
     for (const doc of documents) {
       if (doc.status === 'FAILED') continue;
-      const chunks = await retrievalService.retrieveWithClassification(query, doc.id, classification, chunkLimit);
+      const chunks = plan.isMultiPart
+        ? await retrievalService.retrieveForQuestionPlan(plan, doc.id, chunkLimit)
+        : await retrievalService.retrieveWithClassification(query, doc.id, classification, chunkLimit);
       perDocCount[doc.id] = chunks.length;
       for (const c of chunks) {
         allRetrievedChunks.push({
@@ -104,7 +107,8 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
     const rankedChunks = retrievalService.rerankChunks(
       query,
       allRetrievedChunks as any,
-      classification
+      classification,
+      plan
     ) as TaggedChunk[];
 
     // 6. Evidence Sufficiency Check (Answerability Gate):
@@ -177,9 +181,16 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
         userMessage,
       });
 
-      sendSse('status', {
-        message: `Query classified as ${classification.type}${classification.topic ? ` (${classification.topic})` : ''}. Searching across ${documents.length} contract${documents.length !== 1 ? 's' : ''}...`,
-      });
+      if (plan.isMultiPart) {
+        const sectionsList = Array.from(new Set(plan.parts.flatMap((p) => p.sectionNumbers || []))).join(', ');
+        sendSse('status', {
+          message: `Multi-part question detected (${plan.parts.length} parts: ${plan.parts.map((p) => p.topic).join(', ')}). Formulated QuestionPlan targeting Sections [${sectionsList}]...`,
+        });
+      } else {
+        sendSse('status', {
+          message: `Query classified as ${classification.type}${classification.topic ? ` (${classification.topic})` : ''}. Searching across ${documents.length} contract${documents.length !== 1 ? 's' : ''}...`,
+        });
+      }
 
       // Evidence Sufficiency Gate for Streaming
       if (!sufficiency.sufficient) {
