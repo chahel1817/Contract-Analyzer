@@ -31,6 +31,126 @@ export interface ChunkRef {
 
 export class CitationService {
   /**
+   * Validates whether a candidate quote is substantive evidence rather than
+   * an isolated defined term, a section heading, or an empty phrase fragment.
+   * Enforces Rule 15: QUOTE QUALITY REQUIREMENTS.
+   */
+  isSubstantiveQuote(quote: string): boolean {
+    if (!quote || typeof quote !== 'string') return false;
+    // Strip leading clause numbering or bullets like (a), (i), 1., •, etc.
+    const cleaned = quote.replace(/^(?:\([a-zA-Z\d]+\)|\d{1,2}[.)]|[•\-*])\s*/i, '').trim();
+    const strippedQuotes = cleaned.replace(/^["'“”]+|["'“”]+$/g, '').trim();
+    const words = strippedQuotes.split(/\s+/).filter((w) => w.length > 0);
+
+    // 1. Minimum words and character length
+    if (words.length < 5 || strippedQuotes.length < 25) return false;
+
+    // 2. Reject isolated defined terms or nouns (e.g. "Applicable Term", "Customer Data")
+    if (
+      /^(?:Applicable Term|Customer Data|OneStream|Order Schedule|Confidential Information|Authorized User|Effective Date|Service|Documentation|Agreement)$/i.test(
+        strippedQuotes
+      )
+    ) {
+      return false;
+    }
+
+    // 3. Reject section headings
+    if (
+      /^(?:section\s+\d+|clause\s+\d+|article\s+\d+|attachment\s+[a-z]|\d+\.\s+[A-Z\s]+)$/i.test(
+        strippedQuotes
+      )
+    ) {
+      return false;
+    }
+
+    // 4. Must contain a contractual action verb, definitional verb, or legal condition keyword
+    const contractualVerbs =
+      /\b(means?|shall|will|agrees?|may|is|are|was|were|warrants?|terminates?|survives?|exceeds?|provides?|includes?|begins?|commences?|continues?|holds?|refunds?|pays?|paid|owed|due|applies|apply|limited|liable|exclude|cease|except|claimed|case|breach|indemnity|negligence|misconduct|fraud|occurred?|fail(s|ed|ure)?|credit|credits|request|issued?|entitled?)\b/i;
+    if (!contractualVerbs.test(cleaned)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Two-stage verification step 2: Does the quote sufficiently support the answer?
+   * Checks semantic concept alignment between the candidate quote, the generated answer,
+   * and the question / explanation.
+   */
+  doesQuoteSupportAnswer(
+    quote: string,
+    answer: string,
+    question?: string,
+    supportsExplanation?: string
+  ): { supports: boolean; score: number; reason?: string } {
+    if (!quote || !answer) {
+      return { supports: false, score: 0, reason: 'Missing quote or answer' };
+    }
+
+    // Common English and contract boilerplate words that do not prove a topical conclusion on their own
+    const STOP_WORDS = new Set([
+      'that', 'this', 'with', 'from', 'have', 'been', 'were', 'what', 'when', 'where',
+      'which', 'will', 'would', 'shall', 'should', 'could', 'about', 'under', 'their',
+      'there', 'these', 'those', 'other', 'after', 'before', 'between', 'during', 'such',
+      'each', 'both', 'either', 'neither', 'some', 'any', 'every', 'into', 'over', 'than',
+      // Generic contract boilerplate terms that appear on nearly every page
+      'agreement', 'party', 'parties', 'contract', 'section', 'hereof', 'herein',
+      'thereof', 'therein', 'schedule', 'schedules', 'order', 'orders', 'customer',
+      'onestream', 'service', 'services'
+    ]);
+
+    const tokenize = (text: string): Set<string> => {
+      const words = text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 3 && !STOP_WORDS.has(w));
+      return new Set(words);
+    };
+
+    const quoteTerms = tokenize(quote);
+    const answerTerms = tokenize(answer);
+    const questionTerms = question ? tokenize(question) : new Set<string>();
+    const explanationTerms = supportsExplanation ? tokenize(supportsExplanation) : new Set<string>();
+
+    if (quoteTerms.size === 0 || answerTerms.size === 0) {
+      return { supports: false, score: 0, reason: 'Insufficient key terms' };
+    }
+
+    // Calculate term overlap between quote and answer/explanation/question
+    let matchInAnswer = 0;
+    for (const term of quoteTerms) {
+      if (answerTerms.has(term) || explanationTerms.has(term) || questionTerms.has(term)) {
+        matchInAnswer++;
+      }
+    }
+
+    const overlapRatio = matchInAnswer / quoteTerms.size;
+
+    // Direct verbatim quote inclusion in answer: if the answer quotes this exact passage
+    const cleanQuote = quote.replace(/^[“"']+|[”"']+$/g, '').trim();
+    if (cleanQuote.length >= 15 && answer.includes(cleanQuote)) {
+      return { supports: true, score: 1.0, reason: 'Direct verbatim quote in answer' };
+    }
+
+    // To prove the conclusion, the quote must share substantive topical terms (overlapRatio >= 0.35 with at least 2 substantive matches)
+    if (matchInAnswer >= 2 && overlapRatio >= 0.35) {
+      return {
+        supports: true,
+        score: Math.min(1.0, Number((overlapRatio + 0.2).toFixed(2))),
+        reason: `Shares ${matchInAnswer} substantive topical terms (${Math.round(overlapRatio * 100)}% overlap)`,
+      };
+    }
+
+    return {
+      supports: false,
+      score: Number(overlapRatio.toFixed(2)),
+      reason: `Insufficient substantive topical overlap with answer (${matchInAnswer} matches, ${Math.round(overlapRatio * 100)}% overlap)`,
+    };
+  }
+
+  /**
    * Normalizes text by removing redundant whitespace, line breaks,
    * standardizing quotes and dashes, and building an index map to the raw text.
    */
@@ -42,9 +162,8 @@ export class CitationService {
     for (let i = 0; i < raw.length; i++) {
       let ch = raw[i];
 
-      // Standardize smart/curly quotes & typographic symbols
-      if (ch === '“' || ch === '”') ch = '"';
-      else if (ch === '‘' || ch === '’') ch = "'";
+      // Standardize smart/curly quotes & typographic symbols (normalize single, double, and typographic quotes to ")
+      if (ch === '“' || ch === '”' || ch === '‘' || ch === '’' || ch === "'" || ch === '`') ch = '"';
       else if (ch === '—' || ch === '–') ch = '-';
       else if (ch === '\u00A0') ch = ' ';
 

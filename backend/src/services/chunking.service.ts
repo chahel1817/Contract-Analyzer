@@ -8,11 +8,84 @@ export interface ChunkData {
   pageEnd: number;
   charStart: number;
   charEnd: number;
+  sectionNumber?: string | null;
+  sectionTitle?: string | null;
+}
+
+interface SectionLocation {
+  sectionNumber: string;
+  sectionTitle: string;
+  charOffset: number;
 }
 
 export class ChunkingService {
   /**
-   * Splits extracted contract text into structured chunks with page and character coordinates.
+   * Scans extracted text for numbered sections and schedule/attachment headings
+   */
+  private detectSectionLocations(extractedText: string): SectionLocation[] {
+    const locations: SectionLocation[] = [];
+
+    // 1. Numbered sections: e.g. "10. TERMINATION." or "1. DEFINITIONS."
+    const secRegex = /(?:^|\n)\s*(\d{1,2})\.\s+([A-Z\s/&-]{3,45})\./g;
+    let m: RegExpExecArray | null;
+    while ((m = secRegex.exec(extractedText)) !== null) {
+      locations.push({
+        sectionNumber: m[1],
+        sectionTitle: m[2].trim(),
+        charOffset: m.index,
+      });
+    }
+
+    // 2. Attachments / Schedules / Exhibits: e.g. "ATTACHMENT D - PROFESSIONAL SERVICES"
+    const schRegex = /(?:^|\n)\s*(?:ATTACHMENT|SCHEDULE|EXHIBIT)\s+([A-Z0-9]+)\s*[:–-]?\s*([A-Z\s/&-]{3,45})/gi;
+    while ((m = schRegex.exec(extractedText)) !== null) {
+      locations.push({
+        sectionNumber: `Schedule ${m[1].toUpperCase()}`,
+        sectionTitle: m[2].trim(),
+        charOffset: m.index,
+      });
+    }
+
+    return locations.sort((a, b) => a.charOffset - b.charOffset);
+  }
+
+  /**
+   * Resolves the active section for a given character interval
+   */
+  private resolveSectionForInterval(
+    charStart: number,
+    charEnd: number,
+    locations: SectionLocation[]
+  ): { sectionNumber: string | null; sectionTitle: string | null } {
+    if (locations.length === 0) {
+      return { sectionNumber: null, sectionTitle: null };
+    }
+
+    // Check if a section header begins inside this chunk
+    for (let i = locations.length - 1; i >= 0; i--) {
+      if (locations[i].charOffset >= charStart && locations[i].charOffset < charEnd) {
+        return {
+          sectionNumber: locations[i].sectionNumber,
+          sectionTitle: locations[i].sectionTitle,
+        };
+      }
+    }
+
+    // Otherwise find the most recent section preceding charStart
+    for (let i = locations.length - 1; i >= 0; i--) {
+      if (locations[i].charOffset <= charStart) {
+        return {
+          sectionNumber: locations[i].sectionNumber,
+          sectionTitle: locations[i].sectionTitle,
+        };
+      }
+    }
+
+    return { sectionNumber: null, sectionTitle: null };
+  }
+
+  /**
+   * Splits extracted contract text into section-aware structured chunks
    */
   createChunks(documentId: string, extractedText: string, chunkSize: number = 1000, overlap: number = 150): ChunkData[] {
     const chunks: ChunkData[] = [];
@@ -20,11 +93,10 @@ export class ChunkingService {
       return chunks;
     }
 
-    // Check if text has [[PAGE_X]] markers
+    const sectionLocations = this.detectSectionLocations(extractedText);
     const hasPageMarkers = extractedText.includes('[[PAGE_');
 
     if (hasPageMarkers) {
-      // Parse page by page to ensure precise pageStart & pageEnd
       const pageRegex = /\[\[PAGE_(\d+)\]\]\s*([\s\S]*?)(?=(?:\[\[PAGE_\d+\]\]|$))/g;
       let match: RegExpExecArray | null;
       let globalCharOffset = 0;
@@ -38,7 +110,6 @@ export class ChunkingService {
         while (start < pageContent.length) {
           let end = Math.min(start + chunkSize, pageContent.length);
 
-          // Attempt to break at the end of a sentence or newline if not at end of page
           if (end < pageContent.length) {
             const lastPeriod = pageContent.lastIndexOf('. ', end);
             const lastNewline = pageContent.lastIndexOf('\n', end);
@@ -50,14 +121,20 @@ export class ChunkingService {
 
           const chunkText = pageContent.slice(start, end).trim();
           if (chunkText.length > 0) {
+            const absCharStart = globalCharOffset + start;
+            const absCharEnd = globalCharOffset + end;
+            const sec = this.resolveSectionForInterval(absCharStart, absCharEnd, sectionLocations);
+
             chunks.push({
               documentId,
               text: chunkText,
               chunkIndex: chunkIdx++,
               pageStart: pageNum,
               pageEnd: pageNum,
-              charStart: globalCharOffset + start,
-              charEnd: globalCharOffset + end,
+              charStart: absCharStart,
+              charEnd: absCharEnd,
+              sectionNumber: sec.sectionNumber,
+              sectionTitle: sec.sectionTitle,
             });
           }
 
@@ -68,7 +145,6 @@ export class ChunkingService {
         globalCharOffset += pageContent.length;
       }
     } else {
-      // Plain text without page markers (e.g. DOCX or raw text)
       let start = 0;
       let chunkIdx = 0;
       const charsPerPage = 2500;
@@ -89,6 +165,7 @@ export class ChunkingService {
         if (chunkText.length > 0) {
           const pageStart = Math.floor(start / charsPerPage) + 1;
           const pageEnd = Math.floor(end / charsPerPage) + 1;
+          const sec = this.resolveSectionForInterval(start, end, sectionLocations);
 
           chunks.push({
             documentId,
@@ -98,6 +175,8 @@ export class ChunkingService {
             pageEnd,
             charStart: start,
             charEnd: end,
+            sectionNumber: sec.sectionNumber,
+            sectionTitle: sec.sectionTitle,
           });
         }
 
@@ -111,7 +190,7 @@ export class ChunkingService {
 
   /**
    * Flow:
-   * extractedText -> chunks -> DocumentChunk table
+   * extractedText -> section-aware chunks -> DocumentChunk table
    */
   async processAndStoreChunks(documentId: string, extractedText: string): Promise<number> {
     const chunks = this.createChunks(documentId, extractedText);
@@ -129,19 +208,51 @@ export class ChunkingService {
           data: batch.map((c) => ({
             documentId: c.documentId,
             text: c.text,
-            content: c.text, // for backward compatibility
+            content: c.text,
             chunkIndex: c.chunkIndex,
             pageStart: c.pageStart,
             pageEnd: c.pageEnd,
             charStart: c.charStart,
             charEnd: c.charEnd,
             pageNumber: c.pageStart,
+            sectionNumber: c.sectionNumber || null,
+            sectionTitle: c.sectionTitle || null,
           })),
         });
       }
     }
 
     return chunks.length;
+  }
+
+  /**
+   * Re-chunks an existing document in the database with section metadata
+   */
+  async reindexDocument(documentId: string): Promise<number> {
+    const doc = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: { id: true, extractedText: true },
+    });
+
+    if (!doc || !doc.extractedText) return 0;
+    return this.processAndStoreChunks(doc.id, doc.extractedText);
+  }
+
+  /**
+   * Re-indexes all existing documents in the database
+   */
+  async reindexAllDocuments(): Promise<Record<string, number>> {
+    const docs = await prisma.document.findMany({
+      select: { id: true, extractedText: true },
+    });
+
+    const results: Record<string, number> = {};
+    for (const d of docs) {
+      if (d.extractedText) {
+        results[d.id] = await this.processAndStoreChunks(d.id, d.extractedText);
+      }
+    }
+    return results;
   }
 }
 

@@ -130,7 +130,7 @@
 }
 
 /* ============================================================
-   Contract Citation Highlighting in PDF Text Layer
+   Contract Citation Highlighting in Text View (DOCX / Plain Text)
    ============================================================ */
 mark.contract-citation-highlight {
   background-color: rgba(251, 191, 36, 0.45) !important;
@@ -144,14 +144,51 @@ mark.contract-citation-highlight {
   z-index: 10 !important;
 }
 
+/* ============================================================
+   Contract Citation Highlighting in PDF Text Layer
+   CRITICAL FIX FOR BLURRY / DOUBLED TEXT:
+   In PDF.js / react-pdf, the canvas layer beneath renders the vector text.
+   The text layer spans must remain completely transparent (color: transparent)
+   so the canvas text shines through without any font misalignment, duplicate
+   glyphs, or blurring. We only apply the warm amber highlight background
+   and glowing border.
+   ============================================================ */
+.react-pdf__Page__textContent mark.contract-citation-highlight,
+.textLayer mark.contract-citation-highlight,
+.react-pdf__Page mark.contract-citation-highlight {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  background-color: rgba(245, 158, 11, 0.38) !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: 0 0 0 2.5px rgba(245, 158, 11, 0.75) !important;
+  animation: citationPulse 2.4s ease-in-out infinite alternate !important;
+  display: inline !important;
+  position: relative !important;
+  z-index: 2 !important;
+  font: inherit !important;
+  font-weight: inherit !important;
+  letter-spacing: inherit !important;
+  line-height: inherit !important;
+  white-space: inherit !important;
+  cursor: text !important;
+}
+
+.react-pdf__Page__textContent mark.contract-citation-highlight *,
+.textLayer mark.contract-citation-highlight * {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
 @keyframes citationPulse {
   0% {
-    background-color: rgba(251, 191, 36, 0.4);
-    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.5);
+    background-color: rgba(245, 158, 11, 0.3);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.55);
   }
   100% {
-    background-color: rgba(251, 191, 36, 0.75);
-    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.9), 0 0 16px rgba(245, 158, 11, 0.5);
+    background-color: rgba(245, 158, 11, 0.52);
+    box-shadow: 0 0 0 3.5px rgba(245, 158, 11, 0.9), 0 0 12px rgba(245, 158, 11, 0.4);
   }
 }
 

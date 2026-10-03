@@ -28,7 +28,21 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/comparison', comparisonRoutes);
 
-// Health checks
+// Root & Health checks
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    message: 'Contract Analyzer Backend API is running.',
+    frontendUrl: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    endpoints: {
+      health: '/api/health',
+      documents: '/api/documents',
+      chat: '/api/chat',
+      conversations: '/api/conversations',
+      comparison: '/api/comparison',
+    },
+  });
+});
+
 app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });

@@ -77,12 +77,16 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       chunkIndex: number;
     }
 
+    // 4. Classify Query: SPECIFIC vs SECTION vs BROAD
+    const classification = retrievalService.classifyQuery(query);
+    const chunkLimit = classification.type === 'SPECIFIC' ? 5 : 10;
+
     const allRetrievedChunks: TaggedChunk[] = [];
     const perDocCount: Record<string, number> = {};
 
     for (const doc of documents) {
       if (doc.status === 'FAILED') continue;
-      const chunks = await retrievalService.searchDocument(query, doc.id, 4);
+      const chunks = await retrievalService.retrieveWithClassification(query, doc.id, classification, chunkLimit);
       perDocCount[doc.id] = chunks.length;
       for (const c of chunks) {
         allRetrievedChunks.push({
@@ -164,11 +168,11 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       });
 
       sendSse('status', {
-        message: `Searching across ${documents.length} contract${documents.length !== 1 ? 's' : ''}...`,
+        message: `Query classified as ${classification.type}${classification.topic ? ` (${classification.topic})` : ''}. Searching across ${documents.length} contract${documents.length !== 1 ? 's' : ''}...`,
       });
 
       sendSse('status', {
-        message: `Found ${allRetrievedChunks.length} relevant sections across documents. Generating synthesis...`,
+        message: `Retrieved ${allRetrievedChunks.length} relevant sections with full subsection coverage. Generating synthesis...`,
       });
 
       const abortController = new AbortController();
@@ -198,14 +202,26 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
 
       for (const candidateQuote of aiResult.candidateQuotes) {
         if (!candidateQuote || !candidateQuote.trim()) continue;
+        if (!citationService.isSubstantiveQuote(candidateQuote)) continue;
+        // Stage 1: Does quote exist in document?
         const citData = verifyCandidateQuoteAcrossDocuments(candidateQuote);
-        // Filter out unverified quotes: retain only 100% verified citations
         if (citData && citData.verified) {
-          if (!verifiedCitationsData.some((c) => c.quote === citData.quote && c.documentId === citData.documentId)) {
-            verifiedCitationsData.push(citData);
+          // Stage 2: Does quote sufficiently support answer?
+          const supportCheck = citationService.doesQuoteSupportAnswer(candidateQuote, aiResult.answer, query);
+          if (supportCheck.supports) {
+            if (!verifiedCitationsData.some((c) => c.quote === citData.quote && c.documentId === citData.documentId)) {
+              verifiedCitationsData.push(citData);
+            }
           }
         }
       }
+
+      // Filter out any citation whose quote is subsumed by another citation from the same document
+      const finalStreamingCitations = verifiedCitationsData.filter((c) => {
+        return !verifiedCitationsData.some(
+          (other) => other !== c && other.documentId === c.documentId && other.quote.includes(c.quote)
+        );
+      });
 
       const assistantMessage = await prisma.message.create({
         data: {
@@ -213,7 +229,7 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
           role: 'assistant',
           content: aiResult.answer,
           citations: {
-            create: verifiedCitationsData.map((c) => ({
+            create: finalStreamingCitations.map((c) => ({
               documentId: c.documentId,
               quote: c.quote,
               verified: c.verified,
@@ -262,14 +278,33 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
 
     for (const candQuote of aiResult.quotes) {
       if (!candQuote.text || candQuote.text.trim().length === 0) continue;
+      if (!citationService.isSubstantiveQuote(candQuote.text)) continue;
+      // Stage 1: Does quote exist in document?
       const citData = verifyCandidateQuoteAcrossDocuments(candQuote.text);
-      // Filter out unverified quotes: retain only 100% verified citations
       if (citData && citData.verified) {
-        if (!verifiedCitationsData.some((c) => c.quote === citData.quote && c.documentId === citData.documentId)) {
-          verifiedCitationsData.push(citData);
+        // Stage 2: Does quote sufficiently support answer?
+        const supportCheck = citationService.doesQuoteSupportAnswer(
+          candQuote.text,
+          aiResult.answer,
+          query,
+          candQuote.supports
+        );
+        if (supportCheck.supports) {
+          if (!verifiedCitationsData.some((c) => c.quote === citData.quote && c.documentId === citData.documentId)) {
+            verifiedCitationsData.push(citData);
+          }
+        } else {
+          console.warn(`[chat.controller] Rejected quote (insufficient support): "${candQuote.text}" - Reason: ${supportCheck.reason}`);
         }
       }
     }
+
+    // Filter out any citation whose quote is subsumed by another citation from the same document
+    const finalNonStreamingCitations = verifiedCitationsData.filter((c) => {
+      return !verifiedCitationsData.some(
+        (other) => other !== c && other.documentId === c.documentId && other.quote.includes(c.quote)
+      );
+    });
 
     const assistantMessage = await prisma.message.create({
       data: {
@@ -277,7 +312,7 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
         role: 'assistant',
         content: aiResult.answer,
         citations: {
-          create: verifiedCitationsData.map((c) => ({
+          create: finalNonStreamingCitations.map((c) => ({
             documentId: c.documentId,
             quote: c.quote,
             verified: c.verified,

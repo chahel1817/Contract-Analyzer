@@ -34,13 +34,15 @@ model DocumentChunk {
   content     String?    @db.Text
   pageStart   Int?
   pageEnd     Int?
-  charStart   Int?
-  charEnd     Int?
-  pageNumber  Int?
-  metadata    Json?
-  createdAt   DateTime   @default(now())
+  charStart     Int?
+  charEnd       Int?
+  pageNumber    Int?
+  sectionNumber String?
+  sectionTitle  String?
+  metadata      Json?
+  createdAt     DateTime   @default(now())
 
-  citations   Citation[]
+  citations     Citation[]
 }
 
 model Conversation {

@@ -34,9 +34,8 @@ export function normalizeWithMap(raw: string): { normalized: string; indexMap: n
   for (let i = 0; i < raw.length; i++) {
     let ch = raw[i];
 
-    // Standardize smart/curly quotes & typographic symbols
-    if (ch === '“' || ch === '”') ch = '"';
-    else if (ch === '‘' || ch === '’') ch = "'";
+    // Standardize smart/curly quotes & typographic symbols (normalize single, double, and typographic quotes to ")
+    if (ch === '“' || ch === '”' || ch === '‘' || ch === '’' || ch === "'" || ch === '`') ch = '"';
     else if (ch === '—' || ch === '–') ch = '-';
     else if (ch === '\u00A0') ch = ' ';
 
@@ -70,6 +69,14 @@ export function clearExistingHighlights(container: HTMLElement): void {
   }
 }
 
+// Clean a single word for robust comparison
+function cleanWord(w: string): string {
+  return w
+    .toLowerCase()
+    .replace(/[’‘'"`“”]/g, '"')
+    .replace(/[^\w"()-]/g, '');
+}
+
 /**
  * Searches the text layer of a rendered PDF page and highlights the exact quote.
  */
@@ -97,7 +104,100 @@ export function highlightQuoteInTextLayer(
     return { found: false, highlightedCount: 0, isPartial: false, isCrossPage: false };
   }
 
-  // 3. Build composite page text and character-to-span mapping
+  // -------------------------------------------------------------------------
+  // STRATEGY A: Direct Word-Sequence Span Matcher (immune to offset drift)
+  // -------------------------------------------------------------------------
+  const quoteWords = target.quote
+    .trim()
+    .split(/\s+/)
+    .map(cleanWord)
+    .filter((w) => w.length > 0);
+
+  if (quoteWords.length > 0) {
+    // Map words across spans
+    const allWords: Array<{ word: string; sIdx: number; wordIdxInSpan: number }> = [];
+
+    for (let sIdx = 0; sIdx < spans.length; sIdx++) {
+      const raw = spans[sIdx].textContent || '';
+      const words = raw
+        .split(/\s+/)
+        .map(cleanWord)
+        .filter((w) => w.length > 0);
+
+      for (let wIdx = 0; wIdx < words.length; wIdx++) {
+        allWords.push({ word: words[wIdx], sIdx, wordIdxInSpan: wIdx });
+      }
+    }
+
+    if (allWords.length >= Math.min(quoteWords.length, 3)) {
+      let bestStartSpan = -1;
+      let bestEndSpan = -1;
+      let bestScore = 0;
+
+      const maxStart = allWords.length - Math.min(quoteWords.length, 3);
+      for (let i = 0; i <= maxStart; i++) {
+        let matches = 0;
+        const compareLen = Math.min(quoteWords.length, allWords.length - i);
+        for (let j = 0; j < compareLen; j++) {
+          const docW = allWords[i + j].word;
+          const qW = quoteWords[j];
+          if (docW === qW || (qW.length >= 4 && (docW.includes(qW) || qW.includes(docW)))) {
+            matches++;
+          }
+        }
+
+        const matchRatio = matches / (quoteWords.length || 1);
+        if (matchRatio > bestScore && matches >= Math.min(quoteWords.length, 3)) {
+          bestScore = matchRatio;
+          bestStartSpan = allWords[i].sIdx;
+          bestEndSpan = allWords[Math.min(i + quoteWords.length - 1, allWords.length - 1)].sIdx;
+        }
+      }
+
+      if (bestScore >= 0.5 && bestStartSpan !== -1 && bestEndSpan !== -1) {
+        let firstMark: HTMLElement | undefined;
+        let highlightedCount = 0;
+
+        for (let sIdx = bestStartSpan; sIdx <= bestEndSpan; sIdx++) {
+          const span = spans[sIdx];
+          if (!span) continue;
+
+          const spanText = span.textContent || '';
+          if (!spanText.trim()) continue;
+
+          const mark = document.createElement('mark');
+          mark.className = 'contract-citation-highlight';
+          mark.textContent = spanText;
+
+          span.textContent = '';
+          span.appendChild(mark);
+
+          if (!firstMark) {
+            firstMark = mark;
+          }
+          highlightedCount++;
+        }
+
+        if (firstMark) {
+          setTimeout(() => {
+            firstMark?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 120);
+        }
+
+        return {
+          found: true,
+          highlightedCount,
+          isPartial: bestScore < 0.95,
+          isCrossPage: false,
+          firstMarkElement: firstMark,
+        };
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // STRATEGY B: Fallback Character Mapping for cross-page or partial prefixes
+  // -------------------------------------------------------------------------
   let pageText = '';
   interface CharMap {
     spanIndex: number;
@@ -111,7 +211,6 @@ export function highlightQuoteInTextLayer(
       charToSpan.push({ spanIndex: sIdx, charIndexInSpan: cIdx });
       pageText += spanText[cIdx];
     }
-    // Add space between separate spans to ensure words don't merge across lines
     charToSpan.push({ spanIndex: sIdx, charIndexInSpan: spanText.length });
     pageText += ' ';
   }
@@ -124,7 +223,6 @@ export function highlightQuoteInTextLayer(
     return { found: false, highlightedCount: 0, isPartial: false, isCrossPage: false };
   }
 
-  // 4. Find all matching occurrences on this page (handles duplicate quotes)
   const matchIndices: number[] = [];
   let searchPos = 0;
   const lowerPage = normPageText.toLowerCase();
@@ -143,19 +241,12 @@ export function highlightQuoteInTextLayer(
   let matchLength = lowerQuote.length;
 
   if (matchIndices.length > 0) {
-    // If quote appears multiple times, pick matching occurrence
-    if (target.occurrenceIndex !== undefined && target.occurrenceIndex < matchIndices.length) {
-      chosenMatchIdx = matchIndices[target.occurrenceIndex];
-    } else {
-      // Pick first occurrence by default
-      chosenMatchIdx = matchIndices[0];
-    }
+    chosenMatchIdx = target.occurrenceIndex !== undefined && target.occurrenceIndex < matchIndices.length
+      ? matchIndices[target.occurrenceIndex]
+      : matchIndices[0];
   } else {
-    // 5. Check for Cross-Page Quote:
-    // If quote starts on this page and ends on another page, search for longest matching prefix
     if (target.pageEnd && target.pageEnd > currentPage) {
       isCrossPage = true;
-      // Search for prefix of quote at bottom of page
       for (let len = lowerQuote.length - 1; len >= 20; len -= 5) {
         const prefix = lowerQuote.slice(0, len);
         const pIdx = lowerPage.lastIndexOf(prefix);
@@ -167,7 +258,6 @@ export function highlightQuoteInTextLayer(
         }
       }
     } else if (target.pageStart && target.pageStart < currentPage) {
-      // Quote started on previous page and continues on this page: search for suffix
       isCrossPage = true;
       for (let start = 10; start <= lowerQuote.length - 20; start += 5) {
         const suffix = lowerQuote.slice(start);
@@ -186,7 +276,6 @@ export function highlightQuoteInTextLayer(
     return { found: false, highlightedCount: 0, isPartial: false, isCrossPage };
   }
 
-  // 6. Map normalized match range back to raw page text offsets
   const rawStartChar = pageIndexMap[chosenMatchIdx];
   const rawEndNormIdx = chosenMatchIdx + matchLength - 1;
   const rawEndChar =
@@ -208,7 +297,6 @@ export function highlightQuoteInTextLayer(
   const startSpanIdx = startLoc.spanIndex;
   const endSpanIdx = endLoc.spanIndex;
 
-  // 7. Apply highlight marks to spans (multi-line spanning)
   let firstMark: HTMLElement | undefined;
   let highlightedCount = 0;
 
@@ -227,8 +315,7 @@ export function highlightQuoteInTextLayer(
     if (!highlighted) continue;
 
     const mark = document.createElement('mark');
-    mark.className =
-      'contract-citation-highlight rounded px-0.5 font-medium transition-all duration-300';
+    mark.className = 'contract-citation-highlight';
     mark.textContent = highlighted;
 
     span.textContent = '';
@@ -242,7 +329,6 @@ export function highlightQuoteInTextLayer(
     highlightedCount++;
   }
 
-  // 8. Smoothly scroll highlighted passage into view
   if (firstMark) {
     setTimeout(() => {
       firstMark?.scrollIntoView({ behavior: 'smooth', block: 'center' });

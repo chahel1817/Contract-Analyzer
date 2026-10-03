@@ -41,3 +41,12 @@ yarn-error.log*
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+# Scratch and debug files
+backend/scratch/
+backend/check_*.js
+backend/test_*.js
+backend/get_*.js
+backend/inspect_*.js
+backend/print_*.js
+frontend/*.mjs
