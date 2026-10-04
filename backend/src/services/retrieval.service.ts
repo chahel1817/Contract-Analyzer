@@ -690,13 +690,15 @@ export class RetrievalService {
     }
 
     if (targetSectionNumber) {
-      // Relevance Gate: Strictly isolate chunks belonging to the requested section or its trailing subsections
+      // Relevance Gate: Prioritize chunks belonging to the requested section,
+      // while also retaining high-relevance BM25 keyword hits so relevant text is never dropped
       const secHeadingRegex = new RegExp(`(?:^|\\n)\\s*${targetSectionNumber}\\.\\s+`, 'i');
       const sectionOnly = Array.from(expandedMap.values()).filter((c) => {
         return (
           c.sectionNumber === targetSectionNumber ||
           (c.text && secHeadingRegex.test(c.text)) ||
-          c.matchedKeywords?.includes('section continuation')
+          c.matchedKeywords?.includes('section continuation') ||
+          (c.score !== undefined && c.score >= 2.0)
         );
       });
       if (sectionOnly.length > 0) {
@@ -921,6 +923,7 @@ export class RetrievalService {
         // If not found in DB column, scan chunk text for headings
         if (!targetSectionNum) {
           let bestHeadingScore = 0;
+          let bestHeadingSec = '';
           for (const c of chunks) {
             const chunkText = c.text || c.content || '';
             let m: RegExpExecArray | null;
@@ -929,7 +932,6 @@ export class RetrievalService {
               const secTitle = m[2].trim();
               const secTitleLower = secTitle.toLowerCase();
               const secTitleWords = secTitleLower.split(/\s+/).map((w) => w.replace(/[^a-z0-9]/g, ''));
-              const afterHeading = chunkText.slice(m.index + m[0].length, m.index + m[0].length + 400).toLowerCase();
 
               let matches = 0;
               if (secTitleLower === lowerTopic) matches += 20;
@@ -938,13 +940,15 @@ export class RetrievalService {
               for (const tw of topicWords) {
                 if (secTitleWords.includes(tw)) matches += 5;
                 else if (secTitleLower.includes(tw)) matches += 2;
-                if (afterHeading.includes(tw)) matches += 1;
               }
               if (matches > bestHeadingScore) {
                 bestHeadingScore = matches;
-                targetSectionNum = secNum;
+                bestHeadingSec = secNum;
               }
             }
+          }
+          if (bestHeadingScore >= 5 && bestHeadingSec) {
+            targetSectionNum = bestHeadingSec;
           }
         }
       }
