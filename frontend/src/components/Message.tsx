@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import MarkdownAnswer from './MarkdownAnswer';
 import { ChatMessage, CitationItem } from '@/lib/api';
 import Citation from './Citation';
 import {
@@ -131,18 +132,17 @@ export default function Message({
             )}
 
             {/* Answer Content */}
-            <div className="text-neutral-800 text-sm leading-relaxed whitespace-pre-wrap select-text">
+            <div className="text-neutral-850 text-sm leading-relaxed select-text">
               {message.content ? (
-                message.content
+                <MarkdownAnswer
+                  content={message.content}
+                  isStreaming={message.isStreaming}
+                />
               ) : (
                 <div className="flex items-center gap-2 text-neutral-400 italic py-1">
                   <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
                   <span>Generating answer...</span>
                 </div>
-              )}
-
-              {message.isStreaming && (
-                <span className="inline-block w-2 h-4 ml-1 bg-amber-500 animate-pulse align-middle" />
               )}
             </div>
           </div>
