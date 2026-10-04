@@ -33,8 +33,6 @@ import {
   ChatMessage,
   CitationItem,
 } from '@/lib/api';
-import MarkdownAnswer from './MarkdownAnswer';
-import UploadStatusModal, { UploadModalStatus } from './UploadStatusModal';
 
 // Curated high-value prompts ("good text" for legal contract analysis)
 const CURATED_PROMPTS = [
@@ -86,13 +84,6 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Centered Upload Modal State
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [uploadModalStatus, setUploadModalStatus] = useState<UploadModalStatus>('idle');
-  const [uploadModalFile, setUploadModalFile] = useState<{ name: string; size: number } | null>(null);
-  const [uploadModalError, setUploadModalError] = useState<string | null>(null);
-  const [uploadedDocument, setUploadedDocument] = useState<DocumentItem | null>(null);
 
   // Chat State
   const [query, setQuery] = useState('');
@@ -324,45 +315,21 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploadModalFile({ name: file.name, size: file.size });
-    setIsUploadModalOpen(true);
-    setUploadModalStatus('uploading');
-    setUploadModalError(null);
-    setUploading(true);
-
     try {
+      setUploading(true);
       const res = await uploadDocument(file);
       if (res.success && res.data) {
-        setUploadedDocument(res.data);
-        setUploadModalStatus('success');
         await loadDocs();
         setSelectedDocIds([res.data.id]);
         setIsPlusMenuOpen(false);
-        setIsMenuOpen(false);
       } else {
-        const err = res.error || 'Failed to upload document';
-        setUploadModalError(err);
-        setUploadModalStatus('error');
+        alert(res.error || 'Failed to upload document');
       }
     } catch (err: any) {
-      const msg = err.message || 'Upload error';
-      setUploadModalError(msg);
-      setUploadModalStatus('error');
+      alert(err.message || 'Upload error');
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  };
-
-  const handleAskQuestionsFromModal = (doc?: DocumentItem | null) => {
-    setIsUploadModalOpen(false);
-    const targetDoc = doc || uploadedDocument;
-    if (targetDoc?.id) {
-      setSelectedDocIds([targetDoc.id]);
-    }
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 150);
   };
 
   const selectedDocumentNames = documents
@@ -577,11 +544,7 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                           : 'bg-white text-neutral-900 border border-neutral-200/90 rounded-bl-xs'
                       }`}
                     >
-                      {isUser ? (
-                        <p className="whitespace-pre-wrap select-text">{msg.content}</p>
-                      ) : (
-                        <MarkdownAnswer content={msg.content} isStreaming={msg.isStreaming} />
-                      )}
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
 
                       {/* Streaming Indicator */}
                       {msg.isStreaming && !msg.content && (
@@ -913,19 +876,6 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
           <div className="flex-1" onClick={() => setIsMenuOpen(false)} />
         </div>
       )}
-
-      {/* Centered Small Upload Modal */}
-      <UploadStatusModal
-        isOpen={isUploadModalOpen}
-        status={uploadModalStatus}
-        fileName={uploadModalFile?.name}
-        fileSize={uploadModalFile?.size}
-        errorMessage={uploadModalError}
-        uploadedDoc={uploadedDocument}
-        onClose={() => setIsUploadModalOpen(false)}
-        onAskQuestions={handleAskQuestionsFromModal}
-        onRetry={() => fileInputRef.current?.click()}
-      />
     </div>
   );
 }
