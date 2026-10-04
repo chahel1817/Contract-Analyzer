@@ -7,28 +7,24 @@ import {
   fetchDocuments,
   DocumentItem,
   AgentResearchResult,
-  AgentStep,
 } from '@/lib/api';
 import {
   Bot,
   Sparkles,
-  Search,
   FileText,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Loader2,
   ShieldCheck,
-  Scale,
-  ArrowRight,
   Terminal,
   Cpu,
-  CornerDownRight,
-  HelpCircle,
-  Clock,
-  Layers,
   Check,
   AlertCircle,
+  Search,
+  BookOpen,
+  ArrowRight,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -37,19 +33,16 @@ const DEMO_PROMPTS = [
     label: 'IP Indemnification & Conditions',
     query: 'What are the IP indemnification obligations and what conditions must Customer satisfy?',
     icon: '🛡️',
-    description: 'Rounds 1-5: list_clauses → search IP → get_section 12 → search Customer obligations → final answer',
   },
   {
     label: 'Confidentiality & Survival',
     query: "What are the Customer's confidentiality obligations, and how long do they survive termination?",
     icon: '🔒',
-    description: 'Rounds 1-5: list_clauses → search confidentiality → get_section 13 → search survival → final answer',
   },
   {
     label: 'Limitation of Liability Caps',
     query: 'What are the limitation of liability provisions and what damages are excluded?',
     icon: '⚖️',
-    description: 'Rounds 1-5: list_clauses → search liability cap → get_section 16 → search exclusions → final answer',
   },
 ];
 
@@ -65,7 +58,8 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AgentResearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({});
+  const [showTechnicalLogs, setShowTechnicalLogs] = useState(false);
+  const [expandedLogRounds, setExpandedLogRounds] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     async function loadDocs() {
@@ -75,7 +69,6 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
           const readyDocs = res.data.filter((d) => d.status === 'READY');
           setDocuments(readyDocs);
           if (!selectedDocId && readyDocs.length > 0) {
-            // Prefer Onestream SaaS Agreement if available
             const onestream = readyDocs.find((d) =>
               (d.title || d.fileName).toLowerCase().includes('onestream')
             );
@@ -89,13 +82,6 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
     loadDocs();
   }, [selectedDocId]);
 
-  const toggleStepExpansion = (round: number) => {
-    setExpandedSteps((prev) => ({
-      ...prev,
-      [round]: !prev[round],
-    }));
-  };
-
   const handleRunAgent = async (overrideQuestion?: string) => {
     const q = (overrideQuestion || question).trim();
     if (!q || isLoading) return;
@@ -103,7 +89,8 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
     setIsLoading(true);
     setError(null);
     setResult(null);
-    setExpandedSteps({ 1: true, 2: true, 3: true, 4: true, 5: true });
+    setShowTechnicalLogs(false);
+    setExpandedLogRounds({});
 
     try {
       const res = await runAgentResearch(q, selectedDocId || undefined, maxRounds);
@@ -119,81 +106,51 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
     }
   };
 
-  const getToolDisplayName = (toolName: string) => {
-    switch (toolName) {
-      case 'list_clauses':
-        return 'list_clauses()';
-      case 'search_document':
-        return 'search_document()';
-      case 'get_section':
-        return 'get_section()';
-      case 'final_answer':
-        return 'final_answer()';
+  const getRoundSummary = (round: number, toolName?: string) => {
+    switch (round) {
+      case 1:
+        return { label: 'Clause Topology', icon: BookOpen, desc: 'Mapped contract structure' };
+      case 2:
+        return { label: 'Targeted Search', icon: Search, desc: 'Located operative legal terms' };
+      case 3:
+        return { label: 'Section Deep-Dive', icon: FileText, desc: 'Extracted full clause provisions' };
+      case 4:
+        return { label: 'Corroborate Terms', icon: ShieldCheck, desc: 'Verified qualifying conditions' };
+      case 5:
+        return { label: 'Legal Synthesis', icon: Sparkles, desc: 'Synthesized opinion with citations' };
       default:
-        return toolName;
+        return { label: `Round ${round}`, icon: Terminal, desc: toolName || 'Tool execution' };
     }
   };
 
-  const getRoundTitle = (round: number, toolName?: string) => {
-    if (round === 1) return 'Document Outline & Clause Topology';
-    if (round === 2) return 'Operative Legal Keyword Search';
-    if (round === 3) return 'Clause Deep-Dive & Cross-Reference Mapping';
-    if (round === 4) return 'Reciprocal Duties & Precondition Search';
-    if (round === 5 || toolName === 'final_answer') return 'Multi-Round Evidence Synthesis & Quote Verification';
-    return `Investigative Round ${round}`;
-  };
-
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8 font-sans">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-neutral-900 via-neutral-950 to-neutral-900 text-white p-8 sm:p-10 border border-neutral-800 shadow-xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 space-y-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold tracking-wide">
-            <Bot className="w-3.5 h-3.5" />
-            <span>PART C: AUTONOMOUS RESEARCH AGENT</span>
+    <div className="w-full max-w-5xl mx-auto px-4 py-8 space-y-8 font-sans">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-6 border-b border-neutral-200/80">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-800 text-xs font-bold tracking-wide">
+            <Bot className="w-3.5 h-3.5 text-amber-600" />
+            <span>AUTONOMOUS AGENT · PART C</span>
           </div>
-
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-            Iterative Multi-Round Contract Investigation
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-900">
+            Autonomous Contract Intelligence
           </h1>
-
-          <p className="text-sm sm:text-base text-neutral-300 max-w-3xl leading-relaxed">
-            Demonstrates an autonomous tool-calling research loop across 5 rounds:
-            <span className="font-semibold text-amber-400"> Question ↓ Agent ↓ Tool ↓ Result ↓ Agent ↓ Tool ↓ Final Answer ↓ Quote Verification</span>.
+          <p className="text-sm text-neutral-500 max-w-2xl leading-relaxed">
+            Autonomous multi-round contract investigation engine that plans queries, retrieves sections, corroborates reciprocal duties, and synthesizes 100% verified legal answers.
           </p>
+        </div>
 
-          {/* Architecture Flow Chips */}
-          <div className="pt-2 flex flex-wrap items-center gap-2 text-xs font-mono">
-            <span className="px-2.5 py-1 rounded-lg bg-neutral-800/90 text-neutral-300 border border-neutral-700">
-              Round 1: list_clauses
-            </span>
-            <span className="text-neutral-500">→</span>
-            <span className="px-2.5 py-1 rounded-lg bg-neutral-800/90 text-amber-300 border border-amber-500/30">
-              Round 2: search_document
-            </span>
-            <span className="text-neutral-500">→</span>
-            <span className="px-2.5 py-1 rounded-lg bg-neutral-800/90 text-emerald-300 border border-emerald-500/30">
-              Round 3: get_section
-            </span>
-            <span className="text-neutral-500">→</span>
-            <span className="px-2.5 py-1 rounded-lg bg-neutral-800/90 text-blue-300 border border-blue-500/30">
-              Round 4: search_document
-            </span>
-            <span className="text-neutral-500">→</span>
-            <span className="px-2.5 py-1 rounded-lg bg-amber-500 text-neutral-950 font-bold">
-              Round 5: final_answer + quote verification
-            </span>
-          </div>
+        <div className="hidden sm:flex items-center gap-1.5 text-xs text-neutral-400 font-mono">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+          <span>5-Round Agentic Loop Active</span>
         </div>
       </div>
 
-      {/* Control Panel Card */}
-      <div className="bg-white rounded-2xl border border-neutral-200/90 shadow-sm p-6 sm:p-7 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Document Selector */}
-          <div className="md:col-span-2 space-y-2">
+      {/* Query Control Card */}
+      <div className="bg-white rounded-2xl border border-neutral-200/80 shadow-xs p-6 space-y-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          {/* Target Agreement Selector */}
+          <div className="sm:col-span-2 space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-600 flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-amber-600" />
               Target Agreement
@@ -201,7 +158,7 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
             <select
               value={selectedDocId}
               onChange={(e) => setSelectedDocId(e.target.value)}
-              className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3.5 py-2.5 text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition"
+              className="w-full bg-neutral-50 border border-neutral-200/90 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition cursor-pointer"
             >
               {documents.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -211,80 +168,52 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
             </select>
           </div>
 
-          {/* Max Rounds Selector */}
-          <div className="space-y-2">
+          {/* Quick Scenario Chips */}
+          <div className="space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-600 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-amber-600" />
-              Max Autonomous Rounds
+              <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600" />
+              Scenario Prompts
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-1.5">
               <select
-                value={maxRounds}
-                onChange={(e) => setMaxRounds(Number(e.target.value))}
-                className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3.5 py-2.5 text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition"
+                onChange={(e) => {
+                  const match = DEMO_PROMPTS.find((p) => p.query === e.target.value);
+                  if (match) {
+                    setQuestion(match.query);
+                    handleRunAgent(match.query);
+                  }
+                }}
+                className="w-full bg-neutral-50 border border-neutral-200/90 rounded-xl px-3 py-2.5 text-xs text-neutral-800 focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition cursor-pointer"
               >
-                <option value={3}>3 Rounds (Fast)</option>
-                <option value={4}>4 Rounds (In-Depth)</option>
-                <option value={5}>5 Rounds (Complete Deep Investigation)</option>
+                <option value="">Select a curated question...</option>
+                {DEMO_PROMPTS.map((p, idx) => (
+                  <option key={idx} value={p.query}>
+                    {p.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
         </div>
 
-        {/* Demo Prompts Chips */}
-        <div className="space-y-2">
-          <span className="text-xs font-semibold text-neutral-500 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-500" />
-            Quick Demo Scenarios:
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {DEMO_PROMPTS.map((p, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  setQuestion(p.query);
-                  handleRunAgent(p.query);
-                }}
-                disabled={isLoading}
-                className={`text-left p-3 rounded-xl border transition group ${
-                  question === p.query
-                    ? 'border-amber-400 bg-amber-50/50 shadow-sm'
-                    : 'border-neutral-200/80 bg-neutral-50/50 hover:bg-neutral-100 hover:border-neutral-300'
-                }`}
-              >
-                <div className="flex items-center gap-2 font-bold text-xs text-neutral-900 group-hover:text-amber-800">
-                  <span>{p.icon}</span>
-                  <span>{p.label}</span>
-                </div>
-                <p className="mt-1 text-[11px] text-neutral-500 line-clamp-1">
-                  {p.query}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Research Input Bar */}
-        <div className="space-y-3">
+        {/* Input & Run Action */}
+        <div className="space-y-2 pt-2 border-t border-neutral-100">
           <label className="text-xs font-bold uppercase tracking-wider text-neutral-600">
-            Autonomous Research Prompt
+            Legal Inquiry
           </label>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleRunAgent()}
-                placeholder="Ask complex legal question (e.g. What are the IP indemnification obligations and customer conditions?)"
-                className="w-full bg-white border border-neutral-300 rounded-xl px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-amber-500 transition shadow-inner"
-              />
-            </div>
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <input
+              type="text"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleRunAgent()}
+              placeholder="Ask a contract research question..."
+              className="flex-1 bg-neutral-50/70 border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:bg-white transition"
+            />
             <Button
               onClick={() => handleRunAgent()}
               disabled={isLoading || !question.trim()}
-              className="px-6 py-3 rounded-xl bg-neutral-900 hover:bg-black text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 transition hover:scale-[1.01]"
+              className="px-6 py-3 rounded-xl bg-neutral-900 hover:bg-black text-white font-semibold text-sm shadow-xs flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
             >
               {isLoading ? (
                 <>
@@ -293,8 +222,8 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
                 </>
               ) : (
                 <>
-                  <Bot className="w-4 h-4 text-amber-400" />
-                  <span>Execute Agent Research</span>
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Execute Research</span>
                 </>
               )}
             </Button>
@@ -302,294 +231,237 @@ export default function AgentResearchView({ initialDocumentId }: AgentResearchVi
         </div>
       </div>
 
-      {/* Error Notice */}
+      {/* Error Banner */}
       {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 flex items-start gap-3 text-sm">
-          <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-600 mt-0.5" />
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800 flex items-start gap-3 text-sm">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-600 mt-0.5" />
           <div>
-            <span className="font-bold">Research Error: </span>
+            <span className="font-bold">Error executing research: </span>
             <span>{error}</span>
           </div>
         </div>
       )}
 
-      {/* Loading Skeleton */}
+      {/* Loading Progress State */}
       {isLoading && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-8 text-center space-y-4 animate-pulse">
-          <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-600">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-8 sm:p-10 text-center space-y-4 shadow-xs">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600">
             <Loader2 className="w-6 h-6 animate-spin" />
           </div>
-          <div className="space-y-2">
-            <h3 className="font-extrabold text-neutral-900 text-lg">
-              Autonomous Agent Investigation in Progress...
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="font-bold text-neutral-900 text-base">
+              Autonomous Agent Conducting Research
             </h3>
-            <p className="text-xs text-neutral-600 max-w-md mx-auto">
-              Agent is executing multi-round legal tool calls: querying clause topology, executing keyword chunks search, inspecting full section text, and corroborating reciprocal conditions.
+            <p className="text-xs text-neutral-500 leading-relaxed">
+              Iterating through clause structure, retrieving full section text, corroborating reciprocal obligations, and extracting verbatim verified quotes...
             </p>
           </div>
         </div>
       )}
 
-      {/* Multi-Round Agent Trajectory Stepper */}
+      {/* Completed Research Report View */}
       {result && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-700 flex items-center justify-center font-bold text-sm border border-amber-500/20">
-                {result.rounds}
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Executive Stepper Pipeline */}
+          <div className="bg-white rounded-2xl border border-neutral-200/90 p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+                Agent Research Trajectory ({result.rounds} Rounds)
               </span>
-              <div>
-                <h2 className="text-lg font-extrabold text-neutral-900">
-                  Agent Trajectory ({result.rounds} Investigative Rounds)
-                </h2>
-                <p className="text-xs text-neutral-500">
-                  Status: <span className="font-semibold text-emerald-600">{result.status}</span> · Verification Engine: <span className="font-semibold text-neutral-800">100% Quote Verified</span>
-                </p>
-              </div>
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
+                <span>Verification Complete</span>
+              </span>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const allExpanded = Object.values(expandedSteps).every(Boolean);
-                const nextState = !allExpanded;
-                const newObj: Record<number, boolean> = {};
-                result.steps.forEach((s) => (newObj[s.round] = nextState));
-                setExpandedSteps(newObj);
-              }}
-              className="text-xs font-semibold"
-            >
-              {Object.values(expandedSteps).every(Boolean) ? 'Collapse Details' : 'Expand All Steps'}
-            </Button>
-          </div>
-
-          {/* Stepper Timeline */}
-          <div className="space-y-4">
-            {result.steps.map((step) => {
-              const isExpanded = Boolean(expandedSteps[step.round]);
-              const toolName = step.toolCall?.toolName || 'tool';
-
-              return (
-                <div
-                  key={step.round}
-                  className="rounded-2xl border border-neutral-200/90 bg-white overflow-hidden shadow-sm transition hover:border-neutral-300"
-                >
-                  {/* Step Header Bar */}
+            {/* Stepper Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+              {result.steps.map((step) => {
+                const info = getRoundSummary(step.round, step.toolCall?.toolName);
+                const IconComponent = info.icon;
+                return (
                   <div
-                    onClick={() => toggleStepExpansion(step.round)}
-                    className="p-4 sm:p-5 flex items-center justify-between cursor-pointer hover:bg-neutral-50/80 transition select-none"
+                    key={step.round}
+                    className="p-3 rounded-xl bg-neutral-50/80 border border-neutral-200/70 space-y-1 transition hover:bg-neutral-100/60"
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shadow-xs ${
-                          step.round === 5 || toolName === 'final_answer'
-                            ? 'bg-amber-500 text-neutral-950 font-extrabold'
-                            : 'bg-neutral-900 text-white'
-                        }`}
-                      >
-                        {step.round}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-sm text-neutral-900">
-                            {getRoundTitle(step.round, toolName)}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200">
-                            {getToolDisplayName(toolName)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-neutral-500 mt-0.5 line-clamp-1 max-w-xl">
-                          {step.thought || 'Agent reasoned step execution'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-semibold text-neutral-400 hidden sm:inline">
-                        {isExpanded ? 'Hide Details' : 'View Details'}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase">
+                        Round {step.round}
                       </span>
-                      {isExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-neutral-500" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-neutral-500" />
-                      )}
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     </div>
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-neutral-900">
+                      <IconComponent className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span className="truncate">{info.label}</span>
+                    </div>
+                    <p className="text-[11px] text-neutral-500 truncate">
+                      {info.desc}
+                    </p>
                   </div>
-
-                  {/* Expanded Body */}
-                  {isExpanded && (
-                    <div className="border-t border-neutral-100 p-5 space-y-4 bg-[#fafaf9]/50">
-                      {/* Thought Reasoning */}
-                      {step.thought && (
-                        <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-4 space-y-1">
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                            <Cpu className="w-3.5 h-3.5 text-amber-700" />
-                            <span>Agent Reasoning & Strategy:</span>
-                          </div>
-                          <p className="text-xs text-amber-950 leading-relaxed font-sans pl-5">
-                            {step.thought}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Tool Call Record */}
-                      {step.toolCall && (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
-                            <span className="flex items-center gap-1.5">
-                              <Terminal className="w-3.5 h-3.5 text-neutral-600" />
-                              Tool Invocation: <code className="font-mono text-neutral-900 bg-neutral-100 px-1.5 py-0.5 rounded">{step.toolCall.toolName}</code>
-                            </span>
-                            {step.toolCall.isMalformed ? (
-                              <span className="text-red-600 font-bold text-[11px]">Malformed Call Handled</span>
-                            ) : (
-                              <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" /> Executed Successfully
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Arguments */}
-                          <div className="rounded-xl bg-neutral-900 text-neutral-200 p-3 font-mono text-xs overflow-x-auto">
-                            <span className="text-neutral-500 select-none">// Tool Arguments:{'\n'}</span>
-                            {JSON.stringify(step.toolCall.args, null, 2)}
-                          </div>
-
-                          {/* Result Preview */}
-                          <div className="rounded-xl border border-neutral-200 bg-white p-3.5 space-y-2">
-                            <span className="text-xs font-bold text-neutral-700 block">
-                              Tool Execution Output:
-                            </span>
-
-                            {/* Custom formatting for tool output */}
-                            {toolName === 'list_clauses' && step.toolCall.result?.clauses ? (
-                              <div className="space-y-2">
-                                <div className="text-xs text-neutral-600 font-medium">
-                                  Found <strong className="text-neutral-900">{step.toolCall.result.totalClauses}</strong> clauses in contract:
-                                </div>
-                                <div className="max-h-40 overflow-y-auto space-y-1 pr-2 text-xs font-mono">
-                                  {step.toolCall.result.clauses.slice(0, 15).map((c: any) => (
-                                    <div key={c.index} className="flex items-center justify-between py-1 border-b border-neutral-100">
-                                      <span className="text-neutral-800 font-semibold">{c.title}</span>
-                                      <span className="text-neutral-400 text-[10px]">{c.lengthChars} chars</span>
-                                    </div>
-                                  ))}
-                                  {step.toolCall.result.clauses.length > 15 && (
-                                    <div className="text-[11px] text-neutral-500 italic py-1">
-                                      ... and {step.toolCall.result.clauses.length - 15} more clauses cataloged
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ) : toolName === 'search_document' && step.toolCall.result?.chunks ? (
-                              <div className="space-y-2">
-                                <div className="text-xs text-neutral-600 font-medium">
-                                  Retrieved <strong className="text-neutral-900">{step.toolCall.result.resultsCount}</strong> relevant chunks:
-                                </div>
-                                <div className="max-h-44 overflow-y-auto space-y-2 pr-2">
-                                  {step.toolCall.result.chunks.map((chk: any, cIdx: number) => (
-                                    <div key={cIdx} className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-200 text-xs space-y-1">
-                                      <div className="flex items-center justify-between text-[11px] font-bold text-neutral-600">
-                                        <span>Chunk #{chk.chunkIndex} (Page {chk.pageStart})</span>
-                                        <span className="text-amber-700 font-mono">Score: {chk.score?.toFixed?.(2) || chk.score}</span>
-                                      </div>
-                                      <p className="text-neutral-800 font-mono text-[11px] line-clamp-3">
-                                        {chk.text}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : toolName === 'get_section' && step.toolCall.result?.text ? (
-                              <div className="space-y-1">
-                                <div className="text-xs text-neutral-600 font-medium">
-                                  Verbatim section retrieved: <strong className="text-neutral-900">{step.toolCall.result.title}</strong>
-                                </div>
-                                <div className="max-h-48 overflow-y-auto p-3 rounded-lg bg-neutral-50 border border-neutral-200 font-mono text-xs text-neutral-800 whitespace-pre-wrap">
-                                  {step.toolCall.result.text}
-                                </div>
-                              </div>
-                            ) : (
-                              <pre className="max-h-40 overflow-y-auto font-mono text-xs text-neutral-700 bg-neutral-50 p-2.5 rounded-lg">
-                                {JSON.stringify(step.toolCall.result, null, 2)}
-                              </pre>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
-          {/* =========================================================
-              ROUND 5 / FINAL ANSWER & VERIFIED CITATIONS PANEL
-              ========================================================= */}
-          <div className="rounded-3xl border border-amber-300/80 bg-gradient-to-br from-amber-50/70 via-white to-white p-7 sm:p-8 shadow-md space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-200/80 pb-5">
+          {/* Primary Legal Opinion & Findings Card */}
+          <div className="rounded-2xl border border-neutral-200/90 bg-white p-6 sm:p-8 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-neutral-100">
               <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-900 text-xs font-bold border border-amber-400/40">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />
-                  <span>SYNTHESIZED LEGAL CONCLUSION</span>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>SYNTHESIZED LEGAL FINDINGS</span>
                 </div>
-                <h3 className="text-xl font-extrabold text-neutral-900">
-                  Final Answer & Evidence Verification
-                </h3>
+                <h2 className="text-xl font-bold text-neutral-900">
+                  Legal Analysis & Verified Citations
+                </h2>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300/70 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                  <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
                   <span>{result.citations.length} Verified Citations</span>
                 </span>
               </div>
             </div>
 
-            {/* Answer Body */}
-            <div className="prose prose-sm max-w-none text-neutral-900 space-y-4">
-              <div className="whitespace-pre-wrap leading-relaxed text-sm">
+            {/* Structured Legal Answer */}
+            <div className="prose prose-sm max-w-none text-neutral-800 space-y-4 font-normal leading-relaxed">
+              <div className="whitespace-pre-wrap text-sm sm:text-[15px] space-y-3">
                 {result.answer}
               </div>
             </div>
 
-            {/* Verified Citations Shelf */}
+            {/* Verified Citations List */}
             {result.citations && result.citations.length > 0 && (
-              <div className="pt-4 border-t border-neutral-200/80 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>100% Character-Verified Source Citations ({result.citations.length})</span>
-                </h4>
+              <div className="pt-6 border-t border-neutral-100 space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5">
+                  <span>100% Character-Verified Source Citations</span>
+                </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {result.citations.map((c, idx) => (
                     <div
                       key={idx}
-                      className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-2 text-xs"
+                      className="p-3.5 rounded-xl border border-neutral-200/80 bg-neutral-50/60 space-y-2 text-xs transition hover:bg-neutral-50"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-emerald-900 flex items-center gap-1">
+                        <span className="font-bold text-neutral-800 flex items-center gap-1">
                           <Check className="w-3.5 h-3.5 text-emerald-600 font-extrabold" />
-                          <span>Citation #{idx + 1}</span>
+                          <span>Citation {idx + 1}</span>
                         </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded-md bg-white border border-emerald-300 font-bold text-[10px] text-emerald-800 shadow-xs">
+                        <div className="flex items-center gap-1.5 font-mono text-[10px]">
+                          <span className="px-2 py-0.5 rounded bg-white border border-neutral-200 font-semibold text-neutral-700">
                             Page {c.pageStart || 1}
                           </span>
-                          <span className="font-mono text-[10px] text-emerald-700">
+                          <span className="text-neutral-400">
                             [{c.startOffset}..{c.endOffset}]
                           </span>
                         </div>
                       </div>
 
-                      <p className="text-neutral-800 font-serif italic text-xs border-l-2 border-emerald-400 pl-2 py-0.5 line-clamp-3">
+                      <blockquote className="text-neutral-700 italic border-l-2 border-amber-400 pl-2.5 py-0.5 leading-normal line-clamp-3">
                         &ldquo;{c.quote}&rdquo;
-                      </p>
+                      </blockquote>
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Technical Execution Accordion (Collapsed by Default) */}
+          <div className="rounded-2xl border border-neutral-200/80 bg-white overflow-hidden shadow-xs">
+            <button
+              type="button"
+              onClick={() => setShowTechnicalLogs(!showTechnicalLogs)}
+              className="w-full p-4 sm:p-5 flex items-center justify-between text-left hover:bg-neutral-50 transition cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-neutral-500" />
+                <span className="text-xs font-bold text-neutral-800">
+                  Inspect Technical Agent Tool Calls & Reasoning
+                </span>
+                <span className="text-[11px] text-neutral-400">
+                  ({result.steps.length} rounds logged)
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-neutral-500 font-medium">
+                <span>{showTechnicalLogs ? 'Hide Details' : 'Show Details'}</span>
+                {showTechnicalLogs ? (
+                  <ChevronUp className="w-4 h-4 text-neutral-500" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-neutral-500" />
+                )}
+              </div>
+            </button>
+
+            {showTechnicalLogs && (
+              <div className="border-t border-neutral-100 p-5 space-y-4 bg-neutral-50/50">
+                {result.steps.map((s) => {
+                  const isRoundOpen = Boolean(expandedLogRounds[s.round]);
+                  return (
+                    <div
+                      key={s.round}
+                      className="rounded-xl border border-neutral-200 bg-white overflow-hidden text-xs"
+                    >
+                      <div
+                        onClick={() =>
+                          setExpandedLogRounds((prev) => ({
+                            ...prev,
+                            [s.round]: !prev[s.round],
+                          }))
+                        }
+                        className="p-3.5 flex items-center justify-between hover:bg-neutral-50 transition cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-2.5 font-mono">
+                          <span className="px-2 py-0.5 rounded bg-neutral-900 text-white font-bold text-[10px]">
+                            R{s.round}
+                          </span>
+                          <span className="font-semibold text-neutral-800">
+                            {s.toolCall?.toolName || 'tool'}()
+                          </span>
+                          <span className="text-neutral-400 text-[11px] font-sans truncate max-w-sm hidden sm:inline">
+                            {s.thought}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-neutral-400">
+                          {isRoundOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </div>
+                      </div>
+
+                      {isRoundOpen && (
+                        <div className="p-4 border-t border-neutral-100 space-y-3 bg-neutral-50/30">
+                          {s.thought && (
+                            <div className="space-y-1">
+                              <span className="font-bold text-[10px] uppercase text-neutral-500">Agent Reasoning:</span>
+                              <p className="text-neutral-800 font-sans text-xs bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/60">
+                                {s.thought}
+                              </p>
+                            </div>
+                          )}
+
+                          {s.toolCall && (
+                            <div className="space-y-2">
+                              <span className="font-bold text-[10px] uppercase text-neutral-500 font-mono">
+                                Arguments:
+                              </span>
+                              <pre className="p-2.5 rounded-lg bg-neutral-900 text-neutral-200 font-mono text-[11px] overflow-x-auto">
+                                {JSON.stringify(s.toolCall.args, null, 2)}
+                              </pre>
+
+                              <span className="font-bold text-[10px] uppercase text-neutral-500 font-mono">
+                                Output Preview:
+                              </span>
+                              <pre className="p-2.5 rounded-lg bg-white border border-neutral-200 text-neutral-700 font-mono text-[11px] max-h-40 overflow-y-auto">
+                                {JSON.stringify(s.toolCall.result, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
