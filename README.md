@@ -1,6 +1,13 @@
 # Contract Analyzer
 
-An AI-powered legal contract analysis, extraction, citation verification, and clause-level comparison platform.
+An enterprise-grade legal contract analysis, extraction, citation verification, and clause-level comparison platform.
+
+### 🌐 Live Production Deployment
+- **Frontend Web Application (Vercel):** [https://contract-analyzer-gules.vercel.app](https://contract-analyzer-gules.vercel.app/dashboard)
+- **Backend API Service (Render):** [https://contract-analyzer-nvt5.onrender.com](https://contract-analyzer-nvt5.onrender.com)
+- **Database Infrastructure:** Neon Serverless PostgreSQL
+
+---
 
 ## Architecture
 
