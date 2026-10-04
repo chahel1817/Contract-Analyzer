@@ -14,8 +14,23 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 
+const corsOriginEnv = process.env.CORS_ORIGIN;
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // Allow non-browser requests or missing origin
+    if (!origin) return callback(null, true);
+    // If wildcard or not set, allow
+    if (!corsOriginEnv || corsOriginEnv === '*' || corsOriginEnv.includes('*')) {
+      return callback(null, true);
+    }
+    const allowed = corsOriginEnv.split(',').map((o) => o.trim());
+    if (allowed.includes(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    // Fallback permissive for deployment previews
+    return callback(null, true);
+  },
   credentials: true,
 }));
 app.use(express.json());
