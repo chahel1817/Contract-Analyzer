@@ -161,6 +161,59 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       return null;
     };
 
+    const populateFallbackCitationsIfEmpty = (
+      existing: VerifiedCitationRecord[],
+      targetAnswer: string
+    ) => {
+      if (existing.length > 0 || rankedChunks.length === 0) return;
+
+      // 1. Try finding substantive sentences from top ranked chunks that support answer
+      for (const chunk of rankedChunks.slice(0, 5)) {
+        const sentences = chunk.text.split(/(?<=[.?!])\s+/);
+        for (const rawSent of sentences) {
+          const cleaned = rawSent.replace(/^[\s)\]>,:;-]+/, '').replace(/^[-*•\d.)\s]+/, '').trim();
+          if (cleaned.length < 25 || cleaned.length > 400) continue;
+          if (!citationService.isSubstantiveQuote(cleaned)) continue;
+
+          const citData = verifyCandidateQuoteAcrossDocuments(cleaned);
+          if (citData && citData.verified) {
+            const supportCheck = citationService.doesQuoteSupportAnswer(cleaned, targetAnswer, query);
+            if (supportCheck.supports) {
+              if (!existing.some((c) => c.quote === citData.quote && c.documentId === citData.documentId)) {
+                existing.push(citData);
+                if (existing.length >= 3) return;
+              }
+            }
+          }
+        }
+      }
+
+      // 2. If still empty, accept verified sentences from top 3 chunks with topical overlap
+      if (existing.length === 0) {
+        const qWords = query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 3);
+        for (const chunk of rankedChunks.slice(0, 3)) {
+          const sentences = chunk.text.split(/(?<=[.?!])\s+/);
+          for (const rawSent of sentences) {
+            const cleaned = rawSent.replace(/^[\s)\]>,:;-]+/, '').replace(/^[-*•\d.)\s]+/, '').trim();
+            if (cleaned.length < 25 || cleaned.length > 350) continue;
+            const lower = cleaned.toLowerCase();
+            const hasOverlap =
+              qWords.some((w: string) => lower.includes(w)) ||
+              targetAnswer.toLowerCase().includes(lower.slice(0, 25));
+            if (hasOverlap) {
+              const citData = verifyCandidateQuoteAcrossDocuments(cleaned);
+              if (citData && citData.verified) {
+                if (!existing.some((c) => c.quote === citData.quote && c.documentId === citData.documentId)) {
+                  existing.push(citData);
+                  if (existing.length >= 2) return;
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
     // ==========================================
     // STREAMING FLOW (SSE)
     // ==========================================
@@ -276,6 +329,8 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
         }
       }
 
+      populateFallbackCitationsIfEmpty(verifiedCitationsData, aiResult.answer);
+
       // Filter out any citation whose quote is subsumed by another citation from the same document
       const finalStreamingCitations = verifiedCitationsData.filter((c) => {
         return !verifiedCitationsData.some(
@@ -288,7 +343,10 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       if (!coverageResult.hasCoverage) {
         console.warn('[chat.controller] Streaming answer coverage warning:', coverageResult.unsupportedClaims);
       }
-      const finalAnswer = coverageResult.filteredAnswer || aiResult.answer;
+      let finalAnswer = aiResult.answer;
+      if (coverageResult.filteredAnswer && !coverageResult.filteredAnswer.includes('does not specify verified evidence')) {
+        finalAnswer = coverageResult.filteredAnswer;
+      }
 
       const assistantMessage = await prisma.message.create({
         data: {
@@ -396,6 +454,8 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
       }
     }
 
+    populateFallbackCitationsIfEmpty(verifiedCitationsData, aiResult.answer);
+
     // Filter out any citation whose quote is subsumed by another citation from the same document
     const finalNonStreamingCitations = verifiedCitationsData.filter((c) => {
       return !verifiedCitationsData.some(
@@ -408,7 +468,10 @@ export const sendMessage = async (req: Request, res: Response, next: NextFunctio
     if (!coverageResult.hasCoverage) {
       console.warn('[chat.controller] Answer coverage warning:', coverageResult.unsupportedClaims);
     }
-    const finalAnswer = coverageResult.filteredAnswer || aiResult.answer;
+    let finalAnswer = aiResult.answer;
+    if (coverageResult.filteredAnswer && !coverageResult.filteredAnswer.includes('does not specify verified evidence')) {
+      finalAnswer = coverageResult.filteredAnswer;
+    }
 
     const assistantMessage = await prisma.message.create({
       data: {

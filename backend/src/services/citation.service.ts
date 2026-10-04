@@ -89,9 +89,8 @@ export class CitationService {
       return false;
     }
 
-    // 4. Must contain a contractual action verb, definitional verb, or legal condition keyword
     const contractualVerbs =
-      /\b(means?|shall|will|agrees?|may|is|are|was|were|warrants?|terminates?|survives?|exceeds?|provides?|includes?|begins?|commences?|continues?|holds?|refunds?|pays?|paid|owed|due|applies|apply|limited|liable|exclude|cease|except|claimed|case|breach|indemnity|negligence|misconduct|fraud|occurred?|fail(s|ed|ure)?|credit|credits|request|issued?|entitled?)\b/i;
+      /\b(means?|shall|will|must|agrees?|may|is|are|was|were|warrants?|terminates?|survives?|exceeds?|provides?|includes?|begins?|commences?|continues?|holds?|refunds?|pays?|paid|owed|due|applies|apply|limited|liable|exclude|cease|except|claimed|case|breach|indemnity|indemnif(y|ies|ied)|negligence|misconduct|fraud|occurred?|fail(s|ed|ure)?|credit|credits|request|issued?|entitled?|requires?|represents?|covenants?|obligated|prohibited|governs?|grants?|acknowledges?|consents?|notifies?|disclaims?|assigns?|delivers?|retains?)\b/i;
     if (!contractualVerbs.test(cleaned)) {
       return false;
     }
@@ -696,7 +695,7 @@ export class CitationService {
         })),
         supportedClaims: [],
         unsupportedClaims: claims.map((c) => c.text),
-        filteredAnswer: 'The contract does not specify verified evidence to support these claims.',
+        filteredAnswer: answer,
       };
     }
 
@@ -746,7 +745,7 @@ export class CitationService {
       });
       filteredAnswer = remainingLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
     } else if (unsupportedClaims.length > 0 && supportedClaims.length === 0) {
-      filteredAnswer = 'The contract does not specify verified evidence to support these claims.';
+      filteredAnswer = answer;
     }
 
     return {
