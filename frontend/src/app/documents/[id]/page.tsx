@@ -41,6 +41,7 @@ function DocumentViewerContent() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [highlightTarget, setHighlightTarget] = useState<HighlightTarget | null>(null);
+  const [viewMode, setViewMode] = useState<'pdf' | 'text'>('pdf');
 
   // Read URL search params for citation highlighting (Requirement 17 & 18)
   useEffect(() => {
@@ -142,6 +143,30 @@ function DocumentViewerContent() {
           </div>
 
           <div className="flex items-center space-x-2">
+            {isPdf && (
+              <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200 text-xs mr-1">
+                <button
+                  onClick={() => setViewMode('pdf')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                    viewMode === 'pdf'
+                      ? 'bg-white text-stone-900 shadow-xs'
+                      : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                >
+                  PDF View
+                </button>
+                <button
+                  onClick={() => setViewMode('text')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                    viewMode === 'text'
+                      ? 'bg-white text-stone-900 shadow-xs'
+                      : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                >
+                  Text View
+                </button>
+              </div>
+            )}
             <Link href={`/documents/${id}/chat`}>
               <Button
                 size="sm"
@@ -177,13 +202,14 @@ function DocumentViewerContent() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
             {/* Viewer Column (3 cols) */}
             <div className="lg:col-span-3 min-h-[700px]">
-              {isPdf ? (
+              {isPdf && viewMode === 'pdf' ? (
                 <PdfViewer
                   url={fileUrl}
                   initialPage={highlightTarget?.pageStart || 1}
                   fileName={document.fileName}
                   highlightTarget={highlightTarget}
                   onClearHighlight={() => setHighlightTarget(null)}
+                  onFallbackToText={() => setViewMode('text')}
                 />
               ) : (
                 /* DOCX / Plaintext Viewer */
@@ -191,10 +217,10 @@ function DocumentViewerContent() {
                   <div className="flex items-center justify-between pb-4 mb-4 border-b border-stone-100">
                     <div className="flex items-center space-x-2 text-stone-700 text-xs">
                       <BookOpen className="w-4 h-4 text-amber-600" />
-                      <span className="font-semibold">DOCX Text View</span>
+                      <span className="font-semibold">{isPdf ? 'Extracted Contract Text View' : 'DOCX Text View'}</span>
                     </div>
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
-                      Word Document
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-medium">
+                      {isPdf ? 'Parsed Text' : 'Word Document'}
                     </span>
                   </div>
 

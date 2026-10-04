@@ -63,6 +63,7 @@ export default function DocumentChatPage() {
 
   // Split-Screen & Citation Highlighting State
   const [isSplitView, setIsSplitView] = useState<boolean>(false);
+  const [splitViewMode, setSplitViewMode] = useState<'pdf' | 'text'>('pdf');
   const [activeHighlight, setActiveHighlight] = useState<HighlightTarget | null>(null);
   const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
 
@@ -488,7 +489,7 @@ export default function DocumentChatPage() {
         {/* Right Column: Split View Live Viewer */}
         {isSplitView && (
           <div className="hidden lg:flex lg:w-1/2 h-full flex-col bg-[#f5f5f4] p-4 overflow-hidden animate-in slide-in-from-right-4 duration-200">
-            {isPdf ? (
+            {isPdf && splitViewMode === 'pdf' ? (
               <PdfViewer
                 url={fileUrl}
                 initialPage={activeHighlight?.pageStart || 1}
@@ -498,17 +499,28 @@ export default function DocumentChatPage() {
                   setActiveHighlight(null);
                   setSelectedCitationId(null);
                 }}
+                onFallbackToText={() => setSplitViewMode('text')}
               />
             ) : (
               <div className="flex flex-col h-full bg-white border border-neutral-200 rounded-2xl p-5 overflow-auto shadow-2xs">
                 <div className="flex items-center justify-between pb-3 mb-3 border-b border-neutral-200">
                   <div className="flex items-center space-x-2 text-xs text-neutral-700 font-semibold">
                     <BookOpen className="w-4 h-4 text-amber-500" />
-                    <span>DOCX Text View</span>
+                    <span>{isPdf ? 'Extracted Contract Text View' : 'DOCX Text View'}</span>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
-                    Word Document
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {isPdf && (
+                      <button
+                        onClick={() => setSplitViewMode('pdf')}
+                        className="text-[10px] px-2 py-0.5 rounded bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-medium cursor-pointer"
+                      >
+                        Try PDF View
+                      </button>
+                    )}
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">
+                      {isPdf ? 'Parsed Text' : 'Word Document'}
+                    </span>
+                  </div>
                 </div>
 
                 {activeHighlight?.quote && (

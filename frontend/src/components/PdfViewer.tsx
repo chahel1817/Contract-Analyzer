@@ -16,6 +16,7 @@ import {
   ArrowRight,
   ShieldCheck,
   CheckCircle2,
+  BookOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,6 +38,7 @@ export interface PdfViewerProps {
   fileName?: string;
   highlightTarget?: HighlightTarget | null;
   onClearHighlight?: () => void;
+  onFallbackToText?: () => void;
 }
 
 export default function PdfViewer({
@@ -45,6 +47,7 @@ export default function PdfViewer({
   fileName,
   highlightTarget,
   onClearHighlight,
+  onFallbackToText,
 }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(initialPage);
@@ -265,16 +268,25 @@ export default function PdfViewer({
         {error ? (
           <div className="m-auto text-center p-8 bg-white border border-rose-200 rounded-2xl max-w-md shadow-sm">
             <AlertTriangle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-            <h4 className="text-sm font-bold text-rose-900">Unable to Display PDF</h4>
+            <h4 className="text-sm font-bold text-rose-900">PDF Stream Unavailable</h4>
             <p className="text-xs text-rose-700 mt-1.5">{error}</p>
-            <div className="mt-4">
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2">
+              {onFallbackToText && (
+                <Button
+                  size="sm"
+                  onClick={onFallbackToText}
+                  className="bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs rounded-xl cursor-pointer"
+                >
+                  <BookOpen className="w-3.5 h-3.5 mr-1" /> View Extracted Text
+                </Button>
+              )}
               <a
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-amber-600 hover:text-amber-700 font-semibold underline underline-offset-4"
+                className="text-xs text-stone-600 hover:text-stone-900 font-medium underline underline-offset-4"
               >
-                Download / Open File Directly
+                Download File Directly
               </a>
             </div>
           </div>
