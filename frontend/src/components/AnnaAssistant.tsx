@@ -23,8 +23,6 @@ import {
   Check,
   LayoutDashboard,
   ArrowUpRight,
-  ArrowUp,
-  Brain,
   Bot,
 } from 'lucide-react';
 import {
@@ -85,7 +83,6 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>(initialDocumentId ? [initialDocumentId] : []);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [uploadingFileName, setUploadingFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Chat State
@@ -114,8 +111,8 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
       if (res.success && res.data) {
         const readyDocs = res.data.filter((d) => d.status === 'READY');
         setDocuments(readyDocs);
-        if (initialDocumentId && readyDocs.some((d) => d.id === initialDocumentId)) {
-          setSelectedDocIds([initialDocumentId]);
+        if (!selectedDocIds.length && readyDocs.length > 0) {
+          setSelectedDocIds([readyDocs[0].id]);
         }
       }
     } catch (err) {
@@ -193,24 +190,8 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
     const text = (questionToSend || query).trim();
     if (!text || isGenerating) return;
 
-    // Guard: If no contract is attached, prompt user to attach/upload one
-    if (selectedDocIds.length === 0) {
-      setQuery('');
-      const tempUserMsg: ChatMessage = {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: text,
-        createdAt: new Date().toISOString(),
-      };
-      const promptMsg: ChatMessage = {
-        id: `asst-${Date.now()}`,
-        role: 'assistant',
-        content: 'Please submit or attach a contract (PDF or DOCX) first. Contract Analyzer requires an agreement to extract clauses, perform factual analysis, and provide 100% verified citations.',
-        createdAt: new Date().toISOString(),
-        citations: [],
-      };
-      setMessages((prev) => [...prev, tempUserMsg, promptMsg]);
-      return;
+    if (selectedDocIds.length === 0 && documents.length > 0) {
+      setSelectedDocIds([documents[0].id]);
     }
 
     setError(null);
@@ -336,7 +317,6 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
 
     try {
       setUploading(true);
-      setUploadingFileName(file.name);
       const res = await uploadDocument(file);
       if (res.success && res.data) {
         await loadDocs();
@@ -349,7 +329,6 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
       alert(err.message || 'Upload error');
     } finally {
       setUploading(false);
-      setUploadingFileName('');
     }
   };
 
@@ -375,8 +354,23 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
           <span className="w-5 h-[2px] bg-neutral-900 rounded-full transition-all group-hover:w-4" />
         </button>
 
-        {/* Right Header Navigation */}
+        {/* Right Header Navigation & Document Indicator */}
         <div className="flex items-center space-x-2">
+          {/* Active Document Tag */}
+          {selectedDocumentNames.length > 0 && (
+            <button
+              onClick={() => setIsMenuOpen(true)}
+              title={selectedDocumentNames.join(', ')}
+              className="flex items-center space-x-1.5 px-3 py-1 text-[11px] sm:text-xs font-medium bg-neutral-100/90 text-neutral-700 rounded-full border border-neutral-200/80 hover:bg-neutral-200 transition cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5 text-amber-500" />
+              <span className="max-w-[120px] sm:max-w-[190px] truncate">{selectedDocumentNames[0]}</span>
+              {selectedDocumentNames.length > 1 && (
+                <span className="text-amber-600 font-bold">+{selectedDocumentNames.length - 1}</span>
+              )}
+            </button>
+          )}
+
           {/* Quick link to Part C Agent & Dashboard */}
           <Link
             href="/agent"
@@ -474,12 +468,8 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
               <div className="mt-3.5 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                 {CURATED_PROMPTS.slice(0, 3).map((prompt, idx) => (
                   <button
-                    onClick={() => {
-                      if (selectedDocIds.length === 0 && documents.length > 0) {
-                        setSelectedDocIds([documents[0].id]);
-                      }
-                      handleSend(prompt.query);
-                    }}
+                    key={idx}
+                    onClick={() => handleSend(prompt.query)}
                     className="shrink-0 text-left text-[11px] sm:text-xs bg-white/90 hover:bg-white text-neutral-700 px-3 py-1.5 rounded-full border border-neutral-200/90 shadow-2xs hover:shadow-xs transition flex items-center space-x-1.5 group cursor-pointer"
                   >
                     <span className="text-xs">{prompt.icon}</span>
@@ -556,30 +546,6 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                     >
                       <p className="whitespace-pre-wrap">{msg.content}</p>
 
-                      {/* If assistant asked user to attach contract, show one-click action buttons */}
-                      {!isUser && msg.content.includes('Please submit or attach a contract') && (
-                        <div className="mt-3 pt-2.5 border-t border-neutral-100 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="px-3 py-1.5 rounded-xl bg-neutral-900 text-white hover:bg-black text-xs font-semibold flex items-center gap-1.5 transition shadow-xs cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Upload Contract (PDF/DOCX)</span>
-                          </button>
-                          {documents.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setIsMenuOpen(true)}
-                              className="px-3 py-1.5 rounded-xl bg-neutral-100 text-neutral-800 hover:bg-neutral-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                            >
-                              <FileText className="w-3.5 h-3.5 text-neutral-600" />
-                              <span>Select Existing ({documents.length})</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-
                       {/* Streaming Indicator */}
                       {msg.isStreaming && !msg.content && (
                         <div className="flex items-center space-x-1.5 py-1 text-neutral-400 text-xs">
@@ -652,186 +618,79 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
           </div>
         )}
 
-        {/* 3. Bottom Floating Search / Input Pill */}
+        {/* 3. Bottom Floating Search / Input Pill (Exact replica from image) */}
         <div className="w-full pt-2 pb-5 sm:pb-8 relative shrink-0">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSend();
             }}
-            className="relative w-full"
+            className="relative flex items-center"
           >
-            {/* The Unified Enter Bar Container (ChatGPT / Gemini style) */}
+            {/* The Rounded Full Pill Container */}
             <div
-              className={`w-full rounded-3xl bg-[#f1f1f3] hover:bg-[#eaebee] focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-neutral-300 border border-neutral-200/80 transition-all duration-200 p-3 sm:p-3.5 flex flex-col gap-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.06)] ${
+              className={`w-full flex items-center rounded-full bg-[#f1f1f3] hover:bg-[#eaebee] focus-within:bg-white focus-within:ring-2 focus-within:ring-amber-400/50 focus-within:border-amber-300 border border-neutral-200/70 transition-all duration-200 py-3.5 px-4 shadow-[0_8px_30px_rgba(0,0,0,0.05)] ${
                 isListening ? 'ring-2 ring-amber-400 bg-amber-50/60' : ''
               }`}
             >
-              {/* Inside Enter Bar: Attached Document Card (Matching ChatGPT screenshot) */}
-              {(selectedDocIds.length > 0 || uploading) && (
-                <div className="flex items-center gap-2 pt-1 pl-1">
-                  <div className="relative group w-48 sm:w-56 h-26 sm:h-28 rounded-2xl bg-[#1b1b1e] border border-neutral-700/80 shadow-md overflow-hidden flex flex-col justify-between transition-all animate-in fade-in zoom-in-95 duration-150">
-                    {/* Top Preview Canvas */}
-                    <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-[#252529] to-[#1c1c1f] relative overflow-hidden">
-                      {/* Subtle Document Grid Texture */}
-                      <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:6px_6px]" />
+              {/* Left Action: Plus (+) Button */}
+              <button
+                type="button"
+                onClick={() => setIsPlusMenuOpen(!isPlusMenuOpen)}
+                className="text-neutral-400 hover:text-neutral-900 transition mr-2.5 p-1 rounded-full hover:bg-neutral-200/60 active:scale-90 cursor-pointer"
+                aria-label="Add contract or options"
+                title="Add contract or options"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
 
-                      {uploading ? (
-                        <div className="flex flex-col items-center justify-center gap-1.5 z-10">
-                          {/* Animated Circular Ring Loader matching screenshot */}
-                          <div className="w-7 h-7 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-                          <span className="text-[10px] text-neutral-300 font-medium tracking-wide">
-                            Extracting text...
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 z-10">
-                          <div className="w-9 h-11 bg-neutral-800 rounded-md border border-neutral-600/60 flex flex-col items-center justify-center shadow-inner">
-                            <span className="text-[7px] font-black text-rose-400 uppercase tracking-widest bg-rose-950/90 px-1 py-0.5 rounded leading-none mb-0.5">
-                              PDF
-                            </span>
-                            <FileText className="w-4 h-4 text-neutral-400" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
+              {/* Text Input (Placeholder "Search") */}
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={isListening ? 'Listening to your voice...' : 'Search'}
+                className="flex-1 bg-transparent border-0 outline-none text-neutral-900 placeholder:text-neutral-400 text-[15px] sm:text-[16px] font-normal"
+              />
 
-                    {/* Bottom Filename Strip (Dark strip with red PDF badge & filename) */}
-                    <div className="h-8 bg-[#0f0f11] px-2.5 flex items-center gap-2 border-t border-neutral-800">
-                      <span className="text-[8px] font-bold text-white bg-rose-600 px-1.5 py-0.5 rounded leading-none shrink-0 tracking-wider">
-                        PDF
-                      </span>
-                      <span
-                        className="text-xs font-medium text-neutral-200 truncate flex-1"
-                        title={uploading ? uploadingFileName : selectedDocumentNames[0]}
-                      >
-                        {uploading
-                          ? (uploadingFileName || 'Uploading document...')
-                          : (selectedDocumentNames[0] || 'Contract Document')}
-                      </span>
-                    </div>
-
-                    {/* Corner Remove (x) Button (Round white circle with dark X, matching screenshot) */}
-                    {!uploading && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedDocIds([]);
-                        }}
-                        className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white hover:bg-neutral-200 text-neutral-900 flex items-center justify-center shadow-lg transition border border-neutral-300 z-20 cursor-pointer"
-                        title="Remove attachment"
-                      >
-                        <X className="w-3 h-3 stroke-[3]" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+              {/* Right Action: Stop Button if Generating, Send Button if Text, or Microphone Button */}
+              {isGenerating ? (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  className="ml-2 w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center hover:bg-rose-700 transition active:scale-95 cursor-pointer shadow-xs"
+                  aria-label="Stop generating"
+                  title="Stop generating"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                </button>
+              ) : query.trim().length > 0 ? (
+                <button
+                  type="submit"
+                  className="ml-2 w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center hover:bg-black transition active:scale-95 cursor-pointer"
+                  aria-label="Submit search"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className={`ml-2 text-neutral-500 hover:text-neutral-900 transition p-1.5 rounded-full hover:bg-neutral-200/60 active:scale-90 cursor-pointer ${
+                    isListening ? 'text-amber-600 bg-amber-100 animate-pulse' : ''
+                  }`}
+                  aria-label="Voice input"
+                  title={speechSupported ? 'Speak with Lexi' : 'Voice input'}
+                >
+                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
               )}
-
-              {/* Middle Row: Text Input */}
-              <div className="w-full flex items-center px-1">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder={
-                    isListening
-                      ? 'Listening to your voice...'
-                      : selectedDocIds.length > 0
-                      ? `Ask Lexi about ${selectedDocumentNames[0] || 'this document'}...`
-                      : 'Ask Lexi or attach a contract/resume/document...'
-                  }
-                  className="w-full bg-transparent border-0 outline-none text-neutral-900 placeholder:text-neutral-400 text-[15px] sm:text-[16px] font-normal"
-                />
-              </div>
-
-              {/* Bottom Row: Action Toolbar (+ on left, Think, Mic, Send on right) */}
-              <div className="flex items-center justify-between pt-1 border-t border-neutral-200/50">
-                {/* Left: Plus (+) Button */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setIsPlusMenuOpen(!isPlusMenuOpen)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/80 transition active:scale-95 cursor-pointer"
-                    aria-label="Add contract or options"
-                    title="Attach document or options"
-                  >
-                    <Plus className="w-4 h-4 stroke-[2.5]" />
-                  </button>
-
-                  {selectedDocIds.length > 0 && (
-                    <span className="text-[11px] font-medium text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                      <Check className="w-3 h-3 text-emerald-600" />
-                      <span>Attached</span>
-                    </span>
-                  )}
-                </div>
-
-                {/* Right: Think Mode, Mic, Send */}
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  {/* Think / Deep Analysis Mode Pill (ChatGPT style) */}
-                  <div
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-neutral-200/70 hover:bg-neutral-200 text-neutral-700 transition cursor-default select-none"
-                    title="Verified Evidence Engine Active"
-                  >
-                    <Brain className="w-3.5 h-3.5 text-neutral-600" />
-                    <span className="hidden sm:inline">Think</span>
-                  </div>
-
-                  {/* Microphone Voice Button */}
-                  <button
-                    type="button"
-                    onClick={toggleListening}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/80 transition active:scale-95 cursor-pointer ${
-                      isListening ? 'text-amber-600 bg-amber-100 animate-pulse' : ''
-                    }`}
-                    aria-label="Voice input"
-                    title={speechSupported ? 'Voice dictation' : 'Voice input'}
-                  >
-                    {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                  </button>
-
-                  {/* Send or Stop Button (Blue circular button with ArrowUp matching screenshot) */}
-                  {isGenerating ? (
-                    <button
-                      type="button"
-                      onClick={handleStop}
-                      className="w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center hover:bg-rose-700 transition active:scale-95 cursor-pointer shadow-xs"
-                      aria-label="Stop generating"
-                      title="Stop generating"
-                    >
-                      <Square className="w-3.5 h-3.5 fill-current" />
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={!query.trim() && selectedDocIds.length === 0}
-                      className={`w-8 h-8 rounded-full flex items-center justify-center transition active:scale-95 cursor-pointer shadow-xs ${
-                        query.trim().length > 0 || selectedDocIds.length > 0
-                          ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-blue-500/20'
-                          : 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
-                      }`}
-                      aria-label="Send message"
-                      title="Send message"
-                    >
-                      <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
 
             {/* Plus Action Popup Menu */}
             {isPlusMenuOpen && (
-              <div className="absolute bottom-20 left-2 w-72 bg-white rounded-2xl shadow-xl border border-neutral-200 p-3 z-30 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute bottom-16 left-2 w-72 bg-white rounded-2xl shadow-xl border border-neutral-200 p-3 z-30 animate-in fade-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between pb-2 border-b border-neutral-100">
                   <span className="text-xs font-bold text-neutral-800">Quick Actions</span>
                   <button
@@ -844,18 +703,15 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                 </div>
 
                 <div className="mt-2 space-y-1">
-                  {/* Upload Document (Contract, Resume, Agreement) */}
+                  {/* Upload Contract */}
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsPlusMenuOpen(false);
-                      fileInputRef.current?.click();
-                    }}
+                    onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
                     className="w-full text-left px-2.5 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 rounded-lg flex items-center space-x-2 transition cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5 text-blue-500" />
-                    <span>{uploading ? 'Uploading document...' : 'Upload Document (PDF/DOCX)'}</span>
+                    <Plus className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{uploading ? 'Uploading contract...' : 'Upload Contract (PDF/DOCX)'}</span>
                   </button>
                   <input
                     ref={fileInputRef}
@@ -884,7 +740,7 @@ export default function AnnaAssistant({ initialDocumentId, className = '' }: Ann
                     className="w-full text-left px-2.5 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 rounded-lg flex items-center space-x-2 transition cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Select from Library ({documents.length} available)</span>
+                    <span>Select Target Contracts ({selectedDocIds.length} active)</span>
                   </button>
                 </div>
               </div>
