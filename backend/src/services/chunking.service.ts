@@ -25,8 +25,8 @@ export class ChunkingService {
   private detectSectionLocations(extractedText: string): SectionLocation[] {
     const locations: SectionLocation[] = [];
 
-    // 1. Numbered sections: e.g. "10. TERMINATION." or "1. DEFINITIONS."
-    const secRegex = /(?:^|\n)\s*(\d{1,2})\.\s+([A-Z\s/&-]{3,45})\./g;
+    // 1. Numbered sections: e.g. "10. TERMINATION." or "1. DEFINITIONS" or "6. OWNERSHIP AND INTELLECTUAL PROPERTY."
+    const secRegex = /(?:^|\n)\s*(\d{1,2})\.\s+([A-Za-z\s/&-]{3,50})(?:\.|\n|$)/g;
     let m: RegExpExecArray | null;
     while ((m = secRegex.exec(extractedText)) !== null) {
       locations.push({

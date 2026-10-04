@@ -332,11 +332,14 @@ export class RetrievalService {
       };
     }
 
-    if ((q.includes('customer data') || q.includes('data')) && (q.includes('intellectual property') || q.includes('owns') || q.includes('rights') || q.includes('service') || q.includes('who owns'))) {
+    if (
+      q.includes('ownership') ||
+      q.includes('intellectual property') ||
+      ((q.includes('customer data') || q.includes('data')) && (q.includes('owns') || q.includes('rights') || q.includes('service') || q.includes('who owns')))
+    ) {
       return {
         type: 'SECTION',
-        topic: 'rights',
-        sectionNumber: '14',
+        topic: 'intellectual property',
       };
     }
 
@@ -344,7 +347,6 @@ export class RetrievalService {
       return {
         type: 'SECTION',
         topic: 'liability',
-        sectionNumber: '16',
       };
     }
 
@@ -352,7 +354,6 @@ export class RetrievalService {
       return {
         type: 'SECTION',
         topic: 'confidentiality',
-        sectionNumber: '13',
       };
     }
 
@@ -360,7 +361,6 @@ export class RetrievalService {
       return {
         type: 'SECTION',
         topic: 'termination',
-        sectionNumber: '10',
       };
     }
 
@@ -368,7 +368,6 @@ export class RetrievalService {
       return {
         type: 'SECTION',
         topic: 'term',
-        sectionNumber: '7',
       };
     }
 
@@ -376,7 +375,6 @@ export class RetrievalService {
       return {
         type: 'SECTION',
         topic: 'authorized user',
-        sectionNumber: '1',
       };
     }
 
@@ -396,7 +394,6 @@ export class RetrievalService {
       return {
         type: 'SECTION',
         topic: 'payment',
-        sectionNumber: '8',
       };
     }
 
@@ -412,7 +409,6 @@ export class RetrievalService {
       return {
         type: 'SECTION',
         topic: 'use restrictions',
-        sectionNumber: '5',
       };
     }
 
@@ -420,7 +416,6 @@ export class RetrievalService {
       return {
         type: 'SECTION',
         topic: 'warranty',
-        sectionNumber: '11',
       };
     }
 
@@ -852,7 +847,7 @@ export class RetrievalService {
 
     // B. SECTION or BROAD retrieval: identify section and perform section expansion
     if (cls.type === 'SECTION' || cls.type === 'BROAD') {
-      const headingRegex = /(?:^|\n)\s*(\d{1,2})\.\s+([A-Za-z\s/&-]{3,35})\./g;
+      const headingRegex = /(?:^|\n)\s*(\d{1,2})\.\s+([A-Za-z\s/&-]{3,50})(?:\.|\n|$)/g;
       let targetSectionNum: string | undefined = cls.sectionNumber;
 
       // Legal topic synonym dictionary for topic-to-section mapping
@@ -860,7 +855,8 @@ export class RetrievalService {
         liability: ['liability', 'damages', 'remedies', 'limitation', 'losses'],
         termination: ['termination', 'expiration', 'cancel', 'post-termination'],
         confidentiality: ['confidentiality', 'confidential', 'nondisclosure', 'secret'],
-        'intellectual property': ['intellectual property', 'rights', 'indemnity', 'patents', 'copyright', 'ownership'],
+        'intellectual property': ['intellectual property', 'ownership', 'rights', 'patent', 'copyright', 'trademark', 'license grant', 'customer data'],
+        ownership: ['ownership', 'intellectual property', 'rights', 'customer data', 'title'],
         payment: ['payment', 'taxes', 'fees', 'invoice', 'billing'],
         fees: ['payment', 'fees', 'taxes', 'invoice'],
         warranty: ['warranty', 'warranties', 'disclaimer', 'conform'],
@@ -873,23 +869,53 @@ export class RetrievalService {
       // First check if any chunks in database already have this sectionNumber or title
       if (!targetSectionNum && cls.topic) {
         const lowerTopic = cls.topic.toLowerCase();
-        let topicWords = lowerTopic.split(/\s+/).filter((w) => w.length > 2);
-        if (TOPIC_SYNONYMS[lowerTopic]) {
-          topicWords = Array.from(new Set([...topicWords, ...TOPIC_SYNONYMS[lowerTopic]]));
-        }
+        const STOP_WORDS_SET = new Set(['and', 'or', 'the', 'of', 'for', 'with', 'in', 'about', 'to', 'from', 'a', 'an']);
+        let topicWords = lowerTopic
+          .split(/\s+/)
+          .map((w) => w.replace(/[^a-z0-9]/g, ''))
+          .filter((w) => w.length > 1 && !STOP_WORDS_SET.has(w));
 
-        // Check database sectionTitle columns first
+        for (const [key, syns] of Object.entries(TOPIC_SYNONYMS)) {
+          if (lowerTopic.includes(key) || key.includes(lowerTopic)) {
+            topicWords.push(...syns);
+          }
+        }
+        topicWords = Array.from(new Set(topicWords));
+
+        // Score sections from database sectionTitle columns
+        const sectionScores = new Map<string, number>();
+
         for (const c of chunks) {
           if (c.sectionTitle && c.sectionNumber) {
             const secLower = c.sectionTitle.toLowerCase();
+            let score = 0;
+            if (secLower === lowerTopic) score += 20;
+            else if (secLower.includes(lowerTopic) || lowerTopic.includes(secLower)) score += 12;
+
+            const secWords = secLower.split(/\s+/).map((w) => w.replace(/[^a-z0-9]/g, ''));
             for (const tw of topicWords) {
-              if (secLower.includes(tw)) {
-                targetSectionNum = c.sectionNumber;
-                break;
-              }
+              if (secWords.includes(tw)) score += 5;
+              else if (secLower.includes(tw)) score += 2;
             }
-            if (targetSectionNum) break;
+
+            const current = sectionScores.get(c.sectionNumber) || 0;
+            if (score > current) {
+              sectionScores.set(c.sectionNumber, score);
+            }
           }
+        }
+
+        let bestSection = '';
+        let maxSecScore = 0;
+        for (const [secNum, sc] of sectionScores.entries()) {
+          if (sc > maxSecScore) {
+            maxSecScore = sc;
+            bestSection = secNum;
+          }
+        }
+
+        if (maxSecScore >= 4 && bestSection) {
+          targetSectionNum = bestSection;
         }
 
         // If not found in DB column, scan chunk text for headings
@@ -901,13 +927,17 @@ export class RetrievalService {
             while ((m = headingRegex.exec(chunkText)) !== null) {
               const secNum = m[1];
               const secTitle = m[2].trim();
-              const secTitleWords = secTitle.toLowerCase().split(/\s+/);
+              const secTitleLower = secTitle.toLowerCase();
+              const secTitleWords = secTitleLower.split(/\s+/).map((w) => w.replace(/[^a-z0-9]/g, ''));
               const afterHeading = chunkText.slice(m.index + m[0].length, m.index + m[0].length + 400).toLowerCase();
 
               let matches = 0;
+              if (secTitleLower === lowerTopic) matches += 20;
+              else if (secTitleLower.includes(lowerTopic) || lowerTopic.includes(secTitleLower)) matches += 12;
+
               for (const tw of topicWords) {
-                if (secTitleWords.includes(tw)) matches += 3;
-                else if (secTitleWords.some((sw) => sw.startsWith(tw) || tw.startsWith(sw))) matches += 2;
+                if (secTitleWords.includes(tw)) matches += 5;
+                else if (secTitleLower.includes(tw)) matches += 2;
                 if (afterHeading.includes(tw)) matches += 1;
               }
               if (matches > bestHeadingScore) {
@@ -1088,7 +1118,7 @@ export class RetrievalService {
    * Re-scores retrieved candidate chunks by discounting generic boilerplate
    * and measuring distinctive query term density, phrase alignment, and topical coherence.
    */
-  rerankChunks<T extends { text?: string; score?: number; sectionNumber?: string | null }>(
+  rerankChunks<T extends { text?: string; score?: number; sectionNumber?: string | null; sectionTitle?: string | null }>(
     query: string,
     chunks: T[],
     classification?: QueryClassification,
@@ -1136,6 +1166,12 @@ export class RetrievalService {
         }
       } else if (classification?.sectionNumber && chunk.sectionNumber === classification.sectionNumber) {
         rerankScore += 4.0;
+      } else if (classification?.topic && chunk.sectionTitle) {
+        const tLower = classification.topic.toLowerCase();
+        const secLower = chunk.sectionTitle.toLowerCase();
+        if (secLower.includes(tLower) || tLower.includes(secLower)) {
+          rerankScore += 4.0;
+        }
       }
 
       // 4. Cross-topic penalty (e.g. liability section when question is about pricing or payment)
